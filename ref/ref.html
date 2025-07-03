@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>浅蓝色背景图</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            margin: 0;
+            background-color: #f0f2f5;
+        }
+        .container {
+            width: 95%;
+            max-width: 800px;
+            background-color: white;
+            border-radius: 16px;
+            box-shadow: 0 8px 32px rgba(0,0,0,0.1);
+            padding: 20px;
+            box-sizing: border-box;
+        }
+        canvas {
+            display: block;
+            width: 100%;
+            height: auto;
+            border-radius: 8px;
+            /* 隐藏默认光标，因为我们绘制自定义的 */
+            cursor: none;
+        }
+        h1 {
+            text-align: center;
+            color: #333;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>图表</h1>
+        <canvas id="graphCanvas"></canvas>
+    </div>
+
+    <script>
+        // 当窗口加载时执行绘图函数
+        window.onload = () => {
+            const canvas = document.getElementById('graphCanvas');
+            const ctx = canvas.getContext('2d');
+
+            let canvasSize;
+            let padding, graphSize, origin, scale;
+            let xMin, xMax, yMin, yMax, range;
+
+            // --- 存储临时点和鼠标位置的信息 ---
+            let tempPoint = null;
+            let mousePos = null;
+
+            function setupCanvas() {
+                const dpr = window.devicePixelRatio || 1;
+                const rect = canvas.getBoundingClientRect();
+                canvas.width = rect.width * dpr;
+                canvas.height = rect.width * dpr;
+                ctx.scale(dpr, dpr);
+                
+                canvas.style.width = `${rect.width}px`;
+                canvas.style.height = `${rect.width}px`;
+                canvasSize = rect.width;
+
+                padding = 60;
+                graphSize = canvasSize - 2 * padding;
+                
+                xMin = -5; xMax = 5; yMin = -5; yMax = 5;
+                range = Math.max(xMax - xMin, yMax - yMin);
+                scale = graphSize / range; 
+                
+                origin = { 
+                    x: padding - xMin * scale, 
+                    y: padding + yMax * scale 
+                };
+            }
+
+            // --- 坐标转换函数 ---
+            const toCanvasX = (x) => origin.x + x * scale;
+            const toCanvasY = (y) => origin.y - y * scale;
+            const fromCanvasX = (canvasX) => (canvasX - origin.x) / scale;
+            const fromCanvasY = (canvasY) => (origin.y - canvasY) / scale;
+
+            // --- 绘图函数 ---
+            function drawBackground() {
+                ctx.fillStyle = '#e0f7fa';
+                ctx.fillRect(0, 0, canvasSize, canvasSize);
+            }
+
+            function drawGrid() {
+                ctx.beginPath();
+                ctx.strokeStyle = '#b0bec5';
+                ctx.lineWidth = 0.5;
+                for (let x = Math.ceil(xMin); x <= Math.floor(xMax); x += 1) {
+                    ctx.moveTo(toCanvasX(x), toCanvasY(yMin));
+                    ctx.lineTo(toCanvasX(x), toCanvasY(yMax));
+                }
+                for (let y = Math.ceil(yMin); y <= Math.floor(yMax); y += 1) {
+                    ctx.moveTo(toCanvasX(xMin), toCanvasY(y));
+                    ctx.lineTo(toCanvasX(xMax), toCanvasY(y));
+                }
+                ctx.stroke();
+            }
+
+            function drawAxes() {
+                ctx.beginPath();
+                ctx.strokeStyle = '#37474f';
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(toCanvasX(xMin), toCanvasY(0));
+                ctx.lineTo(toCanvasX(xMax), toCanvasY(0));
+                ctx.moveTo(toCanvasX(0), toCanvasY(yMin));
+                ctx.lineTo(toCanvasX(0), toCanvasY(yMax));
+                ctx.stroke();
+                
+                ctx.fillStyle = '#37474f';
+                ctx.font = '10px Arial';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'top';
+                for (let i = Math.ceil(xMin); i <= Math.floor(xMax); i++) {
+                    if (i !== 0) ctx.fillText(i, toCanvasX(i), toCanvasY(-0.2));
+                }
+                ctx.textAlign = 'right';
+                ctx.textBaseline = 'middle';
+                 for (let i = Math.ceil(yMin); i <= Math.floor(yMax); i++) {
+                    if (i !== 0) ctx.fillText(i, toCanvasX(-0.2), toCanvasY(i));
+                }
+            }
+            
+            function drawRedSector() {
+                const pointX = -1.000;
+                const pointY = 3.544;
+                const radius = Math.sqrt(pointX * pointX + pointY * pointY);
+                const startAngle = Math.PI;
+                const endAngle = 1.5 * Math.PI;
+
+                ctx.beginPath();
+                ctx.fillStyle = 'rgba(211, 47, 47, 0.3)';
+                ctx.moveTo(toCanvasX(0), toCanvasY(0));
+                ctx.arc(toCanvasX(0), toCanvasY(0), radius * scale, startAngle, endAngle, false);
+                ctx.closePath();
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#d32f2f';
+                ctx.lineWidth = 2;
+                ctx.arc(toCanvasX(0), toCanvasY(0), radius * scale, startAngle, endAngle, false);
+                ctx.stroke();
+            }
+
+            function drawOriginPoint() {
+                ctx.fillStyle = '#1e88e5';
+                ctx.beginPath();
+                ctx.arc(toCanvasX(0), toCanvasY(0), 4, 0, 2 * Math.PI);
+                ctx.fill();
+            }
+
+            function drawLocationPoints(locations) {
+                ctx.fillStyle = '#c62828';
+                locations.forEach(loc => {
+                    ctx.beginPath();
+                    ctx.arc(toCanvasX(loc.x), toCanvasY(loc.y), 2.5, 0, 2 * Math.PI);
+                    ctx.fill();
+                });
+            }
+
+            function drawTextBox(text, anchorX, anchorY, width, height, placement = 'left') {
+                let boxLogicalX;
+                const boxLogicalY = anchorY + (height / 2) / scale;
+
+                if (placement === 'right') {
+                    boxLogicalX = anchorX + (10 / scale);
+                } else {
+                    boxLogicalX = anchorX - ((width + 10) / scale);
+                }
+                
+                const canvasX = toCanvasX(boxLogicalX);
+                const canvasY = toCanvasY(boxLogicalY);
+
+                ctx.shadowColor = 'rgba(0, 0, 0, 0.4)';
+                ctx.shadowBlur = 5;
+                ctx.shadowOffsetX = 2;
+                ctx.shadowOffsetY = 2;
+                ctx.fillStyle = '#ffffe0';
+                ctx.strokeStyle = '#d32f2f';
+                ctx.lineWidth = 2;
+                ctx.fillRect(canvasX, canvasY, width, height);
+                ctx.strokeRect(canvasX, canvasY, width, height);
+
+                ctx.shadowColor = 'transparent';
+                ctx.shadowBlur = 0;
+                ctx.shadowOffsetX = 0;
+                ctx.shadowOffsetY = 0;
+
+                ctx.fillStyle = '#c62828';
+                ctx.textAlign = 'center';
+                ctx.textBaseline = 'middle';
+                ctx.font = 'bold 16px Arial';
+                ctx.fillText(text, canvasX + width / 2, canvasY + height / 2);
+            }
+
+            function drawCoordinatesText(loc, boxWidth, boxHeight, placement = 'left') {
+                let boxLogicalX;
+                const boxLogicalY = loc.y + (boxHeight / 2) / scale;
+
+                if (placement === 'right') {
+                    boxLogicalX = loc.x + (10 / scale);
+                } else {
+                    boxLogicalX = loc.x - ((boxWidth + 10) / scale);
+                }
+
+                const canvasX = toCanvasX(boxLogicalX);
+                const canvasY = toCanvasY(boxLogicalY);
+
+                const textStartX = canvasX;
+                const textStartY = canvasY + boxHeight + 12;
+                const lineHeight = 18;
+
+                ctx.fillStyle = '#c62828';
+                ctx.font = 'bold 14px Arial';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+
+                ctx.fillText(`X: ${loc.x}`, textStartX, textStartY);
+                ctx.fillText(`Y: ${loc.y}`, textStartX, textStartY + lineHeight);
+            }
+
+            function drawTempElements() {
+                if (!tempPoint) return;
+
+                ctx.fillStyle = '#2e7d32';
+                ctx.beginPath();
+                ctx.arc(toCanvasX(tempPoint.x), toCanvasY(tempPoint.y), 4, 0, 2 * Math.PI);
+                ctx.fill();
+
+                ctx.beginPath();
+                ctx.strokeStyle = '#4caf50';
+                ctx.lineWidth = 1.5;
+                ctx.moveTo(toCanvasX(0), toCanvasY(0));
+                ctx.lineTo(toCanvasX(tempPoint.x), toCanvasY(tempPoint.y));
+                ctx.stroke();
+
+                const infoText = [
+                    `坐标: X: ${tempPoint.x.toFixed(3)}, Y: ${tempPoint.y.toFixed(3)}`,
+                    `距离: ${tempPoint.distance.toFixed(3)}`,
+                    `角度: ${tempPoint.angle.toFixed(3)}°`
+                ];
+                const textX = toCanvasX(tempPoint.x);
+                const textY = toCanvasY(tempPoint.y) + 15;
+                const lineHeight = 18;
+                const padding = 8;
+                
+                // 动态计算文本框宽度
+                let maxWidth = 0;
+                ctx.font = '12px Arial';
+                infoText.forEach(line => {
+                    const width = ctx.measureText(line).width;
+                    if (width > maxWidth) {
+                        maxWidth = width;
+                    }
+                });
+                const textWidth = maxWidth + padding * 2;
+                const textHeight = infoText.length * lineHeight + padding;
+
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.85)';
+                ctx.strokeStyle = '#2e7d32';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.rect(textX - textWidth / 2, textY, textWidth, textHeight);
+                ctx.fill();
+                ctx.stroke();
+
+                ctx.fillStyle = '#1b5e20';
+                ctx.textAlign = 'left';
+                ctx.textBaseline = 'top';
+                infoText.forEach((line, index) => {
+                    ctx.fillText(line, textX - textWidth / 2 + padding, textY + padding / 2 + index * lineHeight);
+                });
+            }
+            
+            // --- 新增：绘制自定义十字标 ---
+            function drawCustomCrosshair() {
+                if (!mousePos) return;
+                const canvasX = toCanvasX(mousePos.x);
+                const canvasY = toCanvasY(mousePos.y);
+
+                ctx.strokeStyle = 'rgba(0, 0, 0, 0.5)';
+                ctx.lineWidth = 0.5;
+                ctx.beginPath();
+                // 水平线
+                ctx.moveTo(toCanvasX(xMin), canvasY);
+                ctx.lineTo(toCanvasX(xMax), canvasY);
+                // 垂直线
+                ctx.moveTo(canvasX, toCanvasY(yMin));
+                ctx.lineTo(canvasX, toCanvasY(yMax));
+                ctx.stroke();
+            }
+
+            // --- 主绘图函数 ---
+            function drawAll() {
+                const locations = [
+                    { label: '7寸屏', x: -2.625, y: 0, placement: 'left' },
+                    { label: '4寸屏', x: -1.000, y: 3.544, placement: 'left' }
+                ];
+
+                setupCanvas();
+                drawBackground();
+                drawGrid();
+                drawAxes();
+                drawRedSector();
+                drawOriginPoint();
+                drawLocationPoints(locations);
+
+                const boxWidth = 90;
+                const boxHeight = 35;
+                locations.forEach(loc => {
+                    drawTextBox(loc.label, loc.x, loc.y, boxWidth, boxHeight, loc.placement);
+                    drawCoordinatesText(loc, loc.x, loc.y, boxWidth, boxHeight, loc.placement);
+                });
+
+                drawTempElements();
+                drawCustomCrosshair(); // 在最上层绘制十字标
+            }
+
+            // --- 事件处理函数 ---
+            function handleLeftClick(event) {
+                if (mousePos) { // 使用最后记录的鼠标位置
+                    const { x, y } = mousePos;
+                    const distance = Math.sqrt(x * x + y * y);
+                    
+                    const angleToXRad = (x === 0) ? Math.PI / 2 : Math.abs(Math.atan(y / x));
+                    const angleToYRad = (y === 0) ? Math.PI / 2 : Math.abs(Math.atan(x / y));
+                    const minAngleRad = Math.min(angleToXRad, angleToYRad);
+                    const angle = minAngleRad * 180 / Math.PI;
+
+                    tempPoint = { x, y, distance, angle };
+                    drawAll();
+                }
+            }
+
+            function handleRightClick(event) {
+                event.preventDefault();
+                if (tempPoint) {
+                    tempPoint = null;
+                    drawAll();
+                }
+            }
+
+            function handleMouseMove(event) {
+                const rect = canvas.getBoundingClientRect();
+                const dpr = window.devicePixelRatio || 1;
+                const canvasX = (event.clientX - rect.left) * dpr;
+                const canvasY = (event.clientY - rect.top) * dpr;
+
+                const x = fromCanvasX(canvasX);
+                const y = fromCanvasY(canvasY);
+
+                if (x >= xMin && x <= xMax && y >= yMin && y <= yMax) {
+                    mousePos = { x, y };
+                } else {
+                    mousePos = null;
+                }
+                drawAll();
+            }
+
+            function handleMouseLeave() {
+                mousePos = null;
+                drawAll();
+            }
+
+            // --- 初始化和事件监听 ---
+            drawAll();
+            canvas.addEventListener('click', handleLeftClick);
+            canvas.addEventListener('contextmenu', handleRightClick);
+            canvas.addEventListener('mousemove', handleMouseMove);
+            canvas.addEventListener('mouseleave', handleMouseLeave);
+            
+            let resizeTimer;
+            window.addEventListener('resize', () => {
+                clearTimeout(resizeTimer);
+                resizeTimer = setTimeout(drawAll, 250);
+            });
+        };
+    </script>
+</body>
+</html>
