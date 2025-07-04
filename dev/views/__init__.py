@@ -6,11 +6,11 @@
 """
 
 from .main_window import MainWindow
-from .canvas_view import CanvasView  
 from .input_panel import InputPanel
+from .matplotlib_view import MatplotlibView
 
 __all__ = [
     'MainWindow',
-    'CanvasView',
-    'InputPanel'
+    'InputPanel', 
+    'MatplotlibView'
 ] 

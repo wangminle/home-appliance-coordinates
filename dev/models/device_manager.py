@@ -23,6 +23,11 @@ class DeviceOperationError(DeviceManagerError):
     pass
 
 
+class DeviceValidationError(DeviceManagerError):
+    """设备验证错误"""
+    pass
+
+
 class DeviceManager:
     """
     设备数据管理器

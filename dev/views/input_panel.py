@@ -34,14 +34,16 @@ class InputPanel:
         'button_warning': '#FF9800'
     }
     
-    def __init__(self, parent_frame: tk.Frame):
+    def __init__(self, parent_frame: tk.Frame, controller=None):
         """
         初始化功能面板
         
         Args:
             parent_frame: 父容器框架
+            controller: 控制器对象，可选
         """
         self.parent_frame = parent_frame
+        self.controller = controller
         
         # 组件引用
         self.x_range_var = tk.StringVar(value="5")
@@ -576,4 +578,21 @@ class InputPanel:
         
         # 确保按钮状态正确更新
         self.add_update_button.config(text="添加设备")
-        self.delete_button.config(state='disabled') 
+        self.delete_button.config(state='disabled')
+    
+    def reset_inputs(self):
+        """
+        重置所有输入为默认值
+        """
+        # 重置坐标范围
+        self.x_range_var.set("5.0")
+        self.y_range_var.set("5.0")
+        
+        # 清除设备列表
+        self.devices.clear()
+        self._refresh_device_list()
+        
+        # 清除设备输入
+        self._clear_device_inputs()
+        
+        print("✅ 输入面板重置完成") 

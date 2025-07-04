@@ -5,8 +5,8 @@
 包含应用程序的业务逻辑控制器
 """
 
-from .main_controller import MainController
+from .matplotlib_controller import MatplotlibController
 
 __all__ = [
-    'MainController'
+    'MatplotlibController'
 ] 

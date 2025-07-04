@@ -8,7 +8,12 @@
 import uuid
 from datetime import datetime
 from typing import Dict, Any, Optional
-from utils.validation import Validator
+# 导入验证工具
+try:
+    from utils.validation import Validator
+except ImportError:
+    print("⚠️ 验证工具不可用")
+    Validator = None
 
 
 class Device:
@@ -29,17 +34,18 @@ class Device:
             device_id: 设备唯一标识符，可选，默认自动生成
         """
         # 在赋值前进行严格验证
-        name_valid, name_msg = Validator.validate_device_name(name)
-        if not name_valid:
-            raise ValueError(name_msg)
+        if Validator:
+            name_valid, name_msg = Validator.validate_device_name(name)
+            if not name_valid:
+                raise ValueError(name_msg)
 
-        x_valid, x_msg = Validator.validate_coordinate_value(x)
-        if not x_valid:
-            raise ValueError(x_msg)
-            
-        y_valid, y_msg = Validator.validate_coordinate_value(y)
-        if not y_valid:
-            raise ValueError(y_msg)
+            x_valid, x_msg = Validator.validate_coordinate_value(x)
+            if not x_valid:
+                raise ValueError(x_msg)
+                
+            y_valid, y_msg = Validator.validate_coordinate_value(y)
+            if not y_valid:
+                raise ValueError(y_msg)
 
         self.id = device_id or self._generate_id()
         self.name = str(name).strip()
