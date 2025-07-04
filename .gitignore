@@ -1,3 +1,7 @@
+# =============================================================================
+# Python Core - 核心Python配置
+# =============================================================================
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -36,6 +40,10 @@ MANIFEST
 pip-log.txt
 pip-delete-this-directory.txt
 
+# =============================================================================
+# Testing & Coverage - 测试和覆盖率
+# =============================================================================
+
 # Unit test / coverage reports
 htmlcov/
 .tox/
@@ -51,29 +59,25 @@ coverage.xml
 .pytest_cache/
 cover/
 
-# Translations
-*.mo
-*.pot
+# =============================================================================
+# Virtual Environments - 虚拟环境
+# =============================================================================
 
-# Django stuff:
-*.log
-local_settings.py
-db.sqlite3
-db.sqlite3-journal
+# pipenv (本项目使用)
+# Pipfile.lock 应该提交到版本控制
+.venv/
 
-# Flask stuff:
-instance/
-.webassets-cache
+# 其他虚拟环境
+.env
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
 
-# Scrapy stuff:
-.scrapy
-
-# Sphinx documentation
-docs/_build/
-
-# PyBuilder
-.pybuilder/
-target/
+# =============================================================================
+# Development Tools - 开发工具
+# =============================================================================
 
 # Jupyter Notebook
 .ipynb_checkpoints
@@ -82,102 +86,111 @@ target/
 profile_default/
 ipython_config.py
 
-# pyenv
-#   For a library or package, you might want to ignore these files since the code is
-#   intended to run in multiple environments; otherwise, check them in:
-# .python-version
-
-# pipenv
-#   According to pypa/pipenv#598, it is recommended to include Pipfile.lock in version control.
-#   However, in case of collaboration, if having platform-specific dependencies or dependencies
-#   having no cross-platform support, pipenv may install dependencies that don't work, or not
-#   install all needed dependencies.
-#Pipfile.lock
-
-# UV
-#   Similar to Pipfile.lock, it is generally recommended to include uv.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#uv.lock
-
-# poetry
-#   Similar to Pipfile.lock, it is generally recommended to include poetry.lock in version control.
-#   This is especially recommended for binary packages to ensure reproducibility, and is more
-#   commonly ignored for libraries.
-#   https://python-poetry.org/docs/basic-usage/#commit-your-poetrylock-file-to-version-control
-#poetry.lock
-
-# pdm
-#   Similar to Pipfile.lock, it is generally recommended to include pdm.lock in version control.
-#pdm.lock
-#   pdm stores project-wide configurations in .pdm.toml, but it is recommended to not include it
-#   in version control.
-#   https://pdm.fming.dev/latest/usage/project/#working-with-version-control
-.pdm.toml
-.pdm-python
-.pdm-build/
-
-# PEP 582; used by e.g. github.com/David-OConnor/pyflow and github.com/pdm-project/pdm
-__pypackages__/
-
-# Celery stuff
-celerybeat-schedule
-celerybeat.pid
-
-# SageMath parsed files
-*.sage.py
-
-# Environments
-.env
-.venv
-env/
-venv/
-ENV/
-env.bak/
-venv.bak/
-
-# Spyder project settings
-.spyderproject
-.spyproject
-
-# Rope project settings
-.ropeproject
-
-# mkdocs documentation
-/site
-
 # mypy
 .mypy_cache/
 .dmypy.json
 dmypy.json
 
-# Pyre type checker
-.pyre/
-
-# pytype static type analyzer
-.pytype/
-
-# Cython debug symbols
-cython_debug/
-
-# PyCharm
-#  JetBrains specific template is maintained in a separate JetBrains.gitignore that can
-#  be found at https://github.com/github/gitignore/blob/main/Global/JetBrains.gitignore
-#  and can be added to the global gitignore or merged into this file.  For a more nuclear
-#  option (not recommended) you can uncomment the following to ignore the entire idea folder.
-#.idea/
-
-# Ruff stuff:
+# Ruff linter
 .ruff_cache/
 
-# PyPI configuration file
-.pypirc
+# =============================================================================
+# Project Specific - 项目特定配置
+# =============================================================================
 
-# Cursor  
-#  Cursor is an AI-powered code editor.`.cursorignore` specifies files/directories to 
-#  exclude from AI features like autocomplete and code analysis. Recommended for sensitive data
-#  refer to https://docs.cursor.com/context/ignore-files
+# 项目输出目录 - 所有生成的文件
+output/
+dev/output/
+*.png
+*.svg
+*.pdf
+*.eps
+
+# Matplotlib缓存和临时文件
+.matplotlib/
+mpl_*.png
+figure_*.png
+
+# 测试临时文件
+temp_*
+test_output/
+test_*.png
+test_*.svg
+
+# 开发调试文件
+debug_*
+demo_*
+
+# =============================================================================
+# OS Specific - 操作系统特定
+# =============================================================================
+
+# macOS
+.DS_Store
+*/.DS_Store
+.AppleDouble
+.LSOverride
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# Linux
+*~
+
+# =============================================================================
+# Editor Specific - 编辑器特定
+# =============================================================================
+
+# Cursor AI Editor
 .cursorignore
 .cursorindexingignore
-dev/.DS_Store
-.DS_Store
+
+# VSCode
+.vscode/
+*.code-workspace
+
+# PyCharm
+.idea/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+/.emacs.desktop
+/.emacs.desktop.lock
+*.elc
+auto-save-list
+tramp
+.\#*
+
+# =============================================================================
+# Documentation - 文档相关
+# =============================================================================
+
+# Sphinx documentation
+docs/_build/
+docs/temp/*.html
+docs/temp/*.pdf
+
+# =============================================================================
+# Miscellaneous - 其他
+# =============================================================================
+
+# Backup files
+*.bak
+*.backup
+*.old
+
+# Log files
+*.log
+
+# Environment variables
+.env.local
+.env.development
+.env.production
