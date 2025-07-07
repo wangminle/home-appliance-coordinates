@@ -75,7 +75,7 @@ class DeviceManager:
         if self._transaction_backup is not None:
             self._devices = self._transaction_backup
             self._transaction_backup = None
-            print("🔄 设备状态已回滚")
+            print("✓ 设备状态已回滚")
     
     def _clear_backup(self):
         """

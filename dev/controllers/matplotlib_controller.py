@@ -92,6 +92,10 @@ class MatplotlibController:
         self.input_panel.set_export_callback(self.export_png)
         self.input_panel.set_reset_callback(self.reset_all)
         
+        # 绑定用户坐标系事件 ✨ 双坐标系功能
+        self.input_panel.set_user_coord_toggle_callback(self._on_user_coord_toggle)
+        self.input_panel.set_user_position_set_callback(self._on_user_position_set)
+        
         # 初始化设备数据
         self.canvas_view.update_devices(self.device_manager.get_devices())
         self.input_panel.update_devices(self.device_manager.get_devices())
@@ -142,9 +146,11 @@ class MatplotlibController:
     
     def _on_range_change(self, x_range: float, y_range: float):
         """
-        处理坐标范围变化事件
+        处理坐标范围变化事件 ✨ 第五步增强：更新状态指示器
         """
         self.set_coordinate_range(x_range, y_range)
+        # 更新范围状态（确保UI同步）
+        self.input_panel.update_range_status(x_range, y_range)
     
     def _on_device_add(self, device: Device):
         """
@@ -172,6 +178,45 @@ class MatplotlibController:
         if success:
             # 更新输入面板显示
             self.input_panel.update_devices(self.device_manager.get_devices())
+
+    # === 用户坐标系事件处理 ✨ 双坐标系功能 ===
+    
+    def _on_user_coord_toggle(self, enabled: bool):
+        """
+        处理用户坐标系开关切换事件 ✨ 第五步增强：更新状态指示器
+        
+        Args:
+            enabled: True表示启用，False表示关闭
+        """
+        print(f"✨ 控制器收到用户坐标系{'启用' if enabled else '关闭'}事件")
+        
+        # 通知视图切换坐标系模式
+        self.canvas_view.set_user_coordinate_mode(enabled)
+        
+        # 更新状态指示器 ✨ 第五步新增功能
+        self.input_panel.update_coordinate_mode_status(enabled)
+        
+        if not enabled:
+            # 关闭时清除用户位置
+            self.canvas_view.clear_user_position()
+            # 更新用户位置状态为未设置
+            self.input_panel.update_user_position_status(None)
+    
+    def _on_user_position_set(self, x: float, y: float):
+        """
+        处理用户位置设置事件 ✨ 第五步增强：更新状态指示器
+        
+        Args:
+            x: 用户X坐标
+            y: 用户Y坐标
+        """
+        print(f"✨ 控制器收到设置用户位置事件: ({x:.3f}, {y:.3f})")
+        
+        # 通知视图设置用户位置
+        self.canvas_view.set_user_position(x, y)
+        
+        # 更新用户位置状态指示器 ✨ 第五步新增功能
+        self.input_panel.update_user_position_status((x, y))
 
     # === 设备管理方法 ===
     
@@ -373,7 +418,7 @@ class MatplotlibController:
             self.canvas_view.clear_all()
             
             # 重置坐标范围
-            self.canvas_view.set_coordinate_range(5.0, 5.0)
+            self.canvas_view.set_coordinate_range(10.0, 10.0)
             
             # 重置输入面板
             self.input_panel.reset_inputs()
@@ -410,7 +455,7 @@ class MatplotlibController:
         刷新视图（兼容性接口）
         """
         # Matplotlib会自动刷新，无需手动调用
-        print("🔄 视图刷新请求（Matplotlib自动处理）")
+        print("✓ 视图刷新请求（Matplotlib自动处理）")
     
     def get_canvas_view(self):
         """

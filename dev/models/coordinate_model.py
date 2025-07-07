@@ -15,7 +15,7 @@ class CoordinateSystem:
     管理逻辑坐标与Canvas像素坐标之间的转换
     """
     
-    def __init__(self, x_range: float = 5.0, y_range: float = 5.0, 
+    def __init__(self, x_range: float = 10.0, y_range: float = 10.0, 
                  canvas_width: int = 800, canvas_height: int = 800):
         """
         初始化坐标系统

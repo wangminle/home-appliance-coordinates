@@ -49,6 +49,12 @@ class InputPanel:
         self.x_range_var = tk.StringVar(value="5")
         self.y_range_var = tk.StringVar(value="5")
         
+        # 用户坐标系相关 ✨ 双坐标系功能
+        self.user_coord_enabled_var = tk.BooleanVar(value=False)
+        self.user_x_var = tk.StringVar(value="0.0")
+        self.user_y_var = tk.StringVar(value="0.0")
+        self.user_position_frame = None  # 用户位置设置框架引用
+        
         # 设备管理相关
         self.devices: List[Device] = []  # 仅用于缓存显示，实际数据由DeviceManager管理
         self.device_treeview = None
@@ -71,6 +77,9 @@ class InputPanel:
         self.on_device_delete_callback: Optional[Callable[[Device], None]] = None
         self.on_export_callback: Optional[Callable[[], None]] = None
         self.on_reset_callback: Optional[Callable[[], None]] = None
+        # 用户坐标系回调函数 ✨ 双坐标系功能
+        self.on_user_coord_toggle_callback: Optional[Callable[[bool], None]] = None
+        self.on_user_position_set_callback: Optional[Callable[[float, float], None]] = None
         
         self._create_widgets()
         self._bind_events()
@@ -176,19 +185,119 @@ class InputPanel:
             font=('Arial', 12)
         ).pack(side='right', padx=(5, 2))
         
+        # 用户坐标系开关区域 ✨ 双坐标系核心功能
+        user_coord_frame = ttk.Frame(range_frame)
+        user_coord_frame.pack(fill='x', pady=(10, 5))
+        
+        # 用户坐标系开关
+        user_coord_check = ttk.Checkbutton(
+            user_coord_frame,
+            text="启用用户坐标系",
+            variable=self.user_coord_enabled_var,
+            command=self._on_user_coord_toggle,
+            style='Custom.TCheckbutton'
+        )
+        user_coord_check.pack(side='left')
+        
         # 应用按钮
         apply_btn = ttk.Button(
-            range_frame,
-            text="应用范围",
+            user_coord_frame,
+            text="应用设置",
             command=self._on_range_apply,
             style='Custom.TButton'
         )
-        apply_btn.pack(pady=(5, 0))
+        apply_btn.pack(side='right')
+        
+        # 状态指示器区域 ✨ 第五步新增功能
+        status_frame = ttk.LabelFrame(
+            range_frame,
+            text="当前状态",
+            padding=(5, 5)
+        )
+        status_frame.pack(fill='x', pady=(10, 5))
+        
+        # 坐标系模式状态
+        self.coord_mode_label = ttk.Label(
+            status_frame,
+            text="坐标系模式: 世界坐标系",
+            font=('Arial', 10, 'bold'),
+            foreground='#2196F3'
+        )
+        self.coord_mode_label.pack(anchor='w')
+        
+        # 用户位置状态
+        self.user_pos_label = ttk.Label(
+            status_frame,
+            text="用户位置: 未设置",
+            font=('Arial', 10),
+            foreground='#666666'
+        )
+        self.user_pos_label.pack(anchor='w', pady=(2, 0))
+        
+        # 交互模式提示
+        self.interaction_hint_label = ttk.Label(
+            status_frame,
+            text="💡 左键单击测量距离，双击绘制扇形",
+            font=('Arial', 9),
+            foreground='#FF9800'
+        )
+        self.interaction_hint_label.pack(anchor='w', pady=(5, 0))
+        
+        # 用户位置设置区域（默认隐藏）
+        self.user_position_frame = ttk.LabelFrame(
+            range_frame,
+            text="用户位置设置",
+            padding=(5, 5)
+        )
+        # 初始状态隐藏
+        
+        # 用户坐标输入
+        user_pos_input_frame = ttk.Frame(self.user_position_frame)
+        user_pos_input_frame.pack(fill='x', pady=(0, 5))
+        
+        # X坐标输入
+        ttk.Label(
+            user_pos_input_frame,
+            text="X:",
+            font=('Arial', 10)
+        ).pack(side='left', padx=(0, 5))
+        
+        user_x_entry = ttk.Entry(
+            user_pos_input_frame,
+            textvariable=self.user_x_var,
+            width=8,
+            font=('Arial', 10)
+        )
+        user_x_entry.pack(side='left', padx=(0, 10))
+        
+        # Y坐标输入
+        ttk.Label(
+            user_pos_input_frame,
+            text="Y:",
+            font=('Arial', 10)
+        ).pack(side='left', padx=(0, 5))
+        
+        user_y_entry = ttk.Entry(
+            user_pos_input_frame,
+            textvariable=self.user_y_var,
+            width=8,
+            font=('Arial', 10)
+        )
+        user_y_entry.pack(side='left')
+        
+        # 设置用户位置按钮
+        set_user_pos_btn = ttk.Button(
+            self.user_position_frame,
+            text="设置用户位置",
+            command=self._on_user_position_set,
+            style='UserPosition.TButton'
+        )
+        set_user_pos_btn.pack(pady=(5, 0))
         
         # 添加提示信息
         tip_label = ttk.Label(
             range_frame,
-            text="范围: 0.1 - 25，输入后点击应用",
+            text="范围: 0.1 - 25，启用用户坐标系可进行相对位置分析",
             font=('Arial', 8),
             foreground='#666666'
         )
@@ -281,7 +390,7 @@ class InputPanel:
         # 重置按钮
         reset_btn = ttk.Button(
             action_frame,
-            text="🔄 重置所有数据",
+            text="重置所有数据",
             command=self._on_reset
         )
         reset_btn.pack(fill='x')
@@ -565,7 +674,7 @@ class InputPanel:
             y_range = float(self.y_range_var.get())
             return (x_range, y_range)
         except ValueError:
-            return (5.0, 5.0)  # 默认值
+            return (10.0, 10.0)  # 默认值
     
     def clear_selection(self):
         """
@@ -585,8 +694,14 @@ class InputPanel:
         重置所有输入为默认值
         """
         # 重置坐标范围
-        self.x_range_var.set("5.0")
-        self.y_range_var.set("5.0")
+        self.x_range_var.set("10.0")
+        self.y_range_var.set("10.0")
+        
+        # 重置用户坐标系状态 ✨ 双坐标系功能
+        self.user_coord_enabled_var.set(False)
+        self.user_x_var.set("0.0")
+        self.user_y_var.set("0.0")
+        self._toggle_user_position_visibility(False)
         
         # 清除设备列表
         self.devices.clear()
@@ -595,4 +710,174 @@ class InputPanel:
         # 清除设备输入
         self._clear_device_inputs()
         
-        print("✅ 输入面板重置完成") 
+        print("✅ 输入面板重置完成")
+
+    # 用户坐标系相关方法 ✨ 双坐标系功能
+    
+    def _on_user_coord_toggle(self):
+        """
+        处理用户坐标系开关切换事件 ✨ 第五步增强：立即更新状态显示
+        """
+        enabled = self.user_coord_enabled_var.get()
+        self._toggle_user_position_visibility(enabled)
+        
+        # 立即更新状态指示器 ✨ 第五步新增功能
+        self.update_coordinate_mode_status(enabled)
+        
+        # 通知控制器坐标系模式切换
+        if self.on_user_coord_toggle_callback:
+            self.on_user_coord_toggle_callback(enabled)
+        
+        print(f"✨ 用户坐标系{'启用' if enabled else '关闭'}")
+    
+    def _toggle_user_position_visibility(self, show: bool):
+        """
+        切换用户位置设置区域的显示/隐藏
+        
+        Args:
+            show: True显示，False隐藏
+        """
+        if show:
+            self.user_position_frame.pack(fill='x', pady=(5, 0))
+        else:
+            self.user_position_frame.pack_forget()
+    
+    def _on_user_position_set(self):
+        """
+        处理设置用户位置按钮点击事件
+        """
+        try:
+            # 获取用户输入的坐标
+            user_x = float(self.user_x_var.get())
+            user_y = float(self.user_y_var.get())
+            
+            # 验证坐标范围
+            x_range = float(self.x_range_var.get())
+            y_range = float(self.y_range_var.get())
+            
+            if abs(user_x) > x_range or abs(user_y) > y_range:
+                self._show_error(
+                    "坐标超出范围",
+                    f"用户位置坐标必须在当前显示范围内\n"
+                    f"X范围: ±{x_range}, Y范围: ±{y_range}"
+                )
+                return
+            
+            # 通知控制器设置用户位置
+            if self.on_user_position_set_callback:
+                self.on_user_position_set_callback(user_x, user_y)
+            
+            # 立即更新用户位置状态显示 ✨ 第五步新增功能
+            self.update_user_position_status((user_x, user_y))
+            
+            print(f"✨ 设置用户位置: ({user_x}, {user_y})")
+            
+        except ValueError:
+            self._show_error(
+                "输入错误",
+                "请输入有效的数字坐标"
+            )
+    
+    # 回调函数设置方法
+    
+    def set_user_coord_toggle_callback(self, callback: Callable[[bool], None]):
+        """
+        设置用户坐标系开关切换回调函数
+        
+        Args:
+            callback: 回调函数，参数为开关状态(bool)
+        """
+        self.on_user_coord_toggle_callback = callback
+    
+    def set_user_position_set_callback(self, callback: Callable[[float, float], None]):
+        """
+        设置用户位置设置回调函数
+        
+        Args:
+            callback: 回调函数，参数为用户坐标(x, y)
+        """
+        self.on_user_position_set_callback = callback
+    
+    # 状态查询方法
+    
+    def is_user_coord_enabled(self) -> bool:
+        """
+        查询用户坐标系是否已启用
+        
+        Returns:
+            bool: True表示已启用，False表示未启用
+        """
+        return self.user_coord_enabled_var.get()
+    
+    def get_user_position(self) -> tuple:
+        """
+        获取当前设置的用户位置
+        
+        Returns:
+            tuple: (x, y) 用户坐标
+        """
+        try:
+            x = float(self.user_x_var.get())
+            y = float(self.user_y_var.get())
+            return (x, y)
+        except ValueError:
+            return (0.0, 0.0)
+    
+    # === 状态指示器更新方法 ✨ 第五步新增功能 ===
+    
+    def update_coordinate_mode_status(self, user_coord_enabled: bool):
+        """
+        更新坐标系模式状态显示
+        
+        Args:
+            user_coord_enabled: 是否启用用户坐标系
+        """
+        if user_coord_enabled:
+            self.coord_mode_label.config(
+                text="坐标系模式: 用户坐标系",
+                foreground='#7b1fa2'  # 紫色
+            )
+            self.interaction_hint_label.config(
+                text="[提示] 测量以用户位置为原点，双击扇形以用户为中心",
+                foreground='#7b1fa2'
+            )
+        else:
+            self.coord_mode_label.config(
+                text="坐标系模式: 世界坐标系",
+                foreground='#2196F3'  # 蓝色
+            )
+            self.interaction_hint_label.config(
+                text="[提示] 左键单击测量距离，双击绘制扇形",
+                foreground='#FF9800'
+            )
+    
+    def update_user_position_status(self, user_position: Optional[tuple]):
+        """
+        更新用户位置状态显示
+        
+        Args:
+            user_position: 用户位置坐标 (x, y) 或 None
+        """
+        if user_position:
+            x, y = user_position
+            self.user_pos_label.config(
+                text=f"用户位置: ({x:.1f}, {y:.1f})",
+                foreground='#4CAF50'  # 绿色表示已设置
+            )
+        else:
+            self.user_pos_label.config(
+                text="用户位置: 未设置",
+                foreground='#666666'  # 灰色表示未设置
+            )
+    
+    def update_range_status(self, x_range: float, y_range: float):
+        """
+        更新坐标范围状态（可选）
+        
+        Args:
+            x_range: X轴范围
+            y_range: Y轴范围
+        """
+        # 更新输入框显示的值，确保UI与实际状态同步
+        self.x_range_var.set(f"{x_range:.1f}")
+        self.y_range_var.set(f"{y_range:.1f}") 

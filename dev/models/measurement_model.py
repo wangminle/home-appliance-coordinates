@@ -14,22 +14,29 @@ class MeasurementPoint:
     测量点模型类
     
     表示用户在Canvas上点击创建的测量点，包含位置信息和计算数据
+    支持双坐标系计算：世界坐标系(0,0)和用户坐标系
     """
     
-    def __init__(self, x: float, y: float):
+    def __init__(self, x: float, y: float, reference_point: Optional[Tuple[float, float]] = None):
         """
         初始化测量点
         
         Args:
             x: 测量点X坐标
             y: 测量点Y坐标
+            reference_point: 参考点坐标(rx, ry)，默认为世界原点(0,0)
         """
         self.x = float(x)
         self.y = float(y)
+        self.reference_point = reference_point or (0.0, 0.0)
         
         # 自动计算相关属性
         self.distance_to_origin = self._calculate_distance_to_origin()
         self.angle_to_axis = self._calculate_min_angle_to_axis()
+        
+        # 双坐标系计算属性 ✨ 新增功能
+        self.distance_to_reference = self._calculate_distance_to_reference()
+        self.angle_to_reference_axis = self._calculate_min_angle_to_reference_axis()
         
         # 验证数据有效性
         self._validate()
@@ -84,6 +91,45 @@ class MeasurementPoint:
         min_angle_rad = min(angle_to_x_rad, angle_to_y_rad)
         return min_angle_rad * 180 / math.pi
     
+    def _calculate_distance_to_reference(self) -> float:
+        """
+        计算到参考点的欧几里得距离 ✨ 双坐标系功能
+        
+        Returns:
+            到参考点的距离
+        """
+        rx, ry = self.reference_point
+        return math.sqrt((self.x - rx) ** 2 + (self.y - ry) ** 2)
+    
+    def _calculate_min_angle_to_reference_axis(self) -> float:
+        """
+        计算与参考点坐标轴的最小夹角 ✨ 双坐标系功能
+        
+        以参考点为原点，计算测量点与参考坐标轴的最小夹角
+        
+        Returns:
+            与参考点坐标轴的最小夹角（度数，0-90度）
+        """
+        rx, ry = self.reference_point
+        relative_x = self.x - rx
+        relative_y = self.y - ry
+        
+        # 计算与参考X轴的夹角
+        if relative_x == 0:
+            angle_to_x_rad = math.pi / 2
+        else:
+            angle_to_x_rad = abs(math.atan(relative_y / relative_x))
+        
+        # 计算与参考Y轴的夹角
+        if relative_y == 0:
+            angle_to_y_rad = math.pi / 2
+        else:
+            angle_to_y_rad = abs(math.atan(relative_x / relative_y))
+        
+        # 取最小夹角并转换为度数
+        min_angle_rad = min(angle_to_x_rad, angle_to_y_rad)
+        return min_angle_rad * 180 / math.pi
+    
     def update_position(self, x: float, y: float):
         """
         更新测量点位置并重新计算相关数据
@@ -99,8 +145,26 @@ class MeasurementPoint:
         self.distance_to_origin = self._calculate_distance_to_origin()
         self.angle_to_axis = self._calculate_min_angle_to_axis()
         
+        # 重新计算双坐标系属性 ✨ 新增功能
+        self.distance_to_reference = self._calculate_distance_to_reference()
+        self.angle_to_reference_axis = self._calculate_min_angle_to_reference_axis()
+        
         # 验证新数据
         self._validate()
+    
+    def update_reference_point(self, rx: float, ry: float):
+        """
+        更新参考点并重新计算相关数据 ✨ 双坐标系功能
+        
+        Args:
+            rx: 参考点X坐标
+            ry: 参考点Y坐标
+        """
+        self.reference_point = (float(rx), float(ry))
+        
+        # 重新计算双坐标系属性
+        self.distance_to_reference = self._calculate_distance_to_reference()
+        self.angle_to_reference_axis = self._calculate_min_angle_to_reference_axis()
     
     def distance_to_point(self, x: float, y: float) -> float:
         """
@@ -162,33 +226,45 @@ class MeasurementPoint:
         else:
             raise ValueError("象限编号必须是1-4")
     
-    def get_formatted_info(self, decimal_places: int = 3) -> dict:
+    def get_formatted_info(self, decimal_places: int = 3, use_reference: bool = False) -> dict:
         """
-        获取格式化的测量信息
+        获取格式化的测量信息 ✨ 支持双坐标系
         
         Args:
             decimal_places: 小数位数，默认3位
+            use_reference: True使用参考点坐标系，False使用世界坐标系
             
         Returns:
             包含格式化信息的字典
         """
-        return {
-            'coordinates': f"坐标: X: {self.x:.{decimal_places}f}, Y: {self.y:.{decimal_places}f}",
-            'distance': f"距离: {self.distance_to_origin:.{decimal_places}f}",
-            'angle': f"角度: {self.angle_to_axis:.{decimal_places}f}°"
-        }
+        if use_reference and self.reference_point != (0.0, 0.0):
+            # 使用用户坐标系
+            rx, ry = self.reference_point
+            return {
+                'coordinates': f"用户坐标: X: {self.x-rx:.{decimal_places}f}, Y: {self.y-ry:.{decimal_places}f}",
+                'distance': f"到用户距离: {self.distance_to_reference:.{decimal_places}f}",
+                'angle': f"用户角度: {self.angle_to_reference_axis:.{decimal_places}f}°"
+            }
+        else:
+            # 使用世界坐标系
+            return {
+                'coordinates': f"世界坐标: X: {self.x:.{decimal_places}f}, Y: {self.y:.{decimal_places}f}",
+                'distance': f"到原点距离: {self.distance_to_origin:.{decimal_places}f}",
+                'angle': f"世界角度: {self.angle_to_axis:.{decimal_places}f}°"
+            }
     
-    def get_info_lines(self, decimal_places: int = 3) -> list:
+    def get_info_lines(self, decimal_places: int = 3, use_reference: bool = False) -> list:
         """
-        获取测量信息的文本行列表（用于显示）
+        获取测量信息的文本行列表（用于显示）✨ 支持双坐标系
         
         Args:
             decimal_places: 小数位数，默认3位
+            use_reference: True使用参考点坐标系，False使用世界坐标系
             
         Returns:
             信息文本行列表
         """
-        info = self.get_formatted_info(decimal_places)
+        info = self.get_formatted_info(decimal_places, use_reference)
         return [info['coordinates'], info['distance'], info['angle']]
     
     def to_dict(self) -> dict:

@@ -7,7 +7,8 @@
 
 ### 1.2 核心功能
 - 可视化坐标系统展示设备位置
-- 交互式距离角度测量
+- **双坐标系功能**: 世界坐标系(环境固定) + 用户坐标系(动态相对) ✨ 核心创新
+- 交互式距离角度测量（支持双重计算）
 - 动态设备管理（增删改）
 - 坐标系范围自定义
 - 高清PNG导出功能
@@ -55,6 +56,7 @@
 │   ├── device_model.py     # 设备数据模型
 │   ├── device_manager.py   # 设备管理器 (核心创新)
 │   ├── coordinate_model.py # 坐标系统模型
+│   ├── user_position_model.py # 用户位置模型 ✨ 双坐标系核心
 │   └── measurement_model.py # 测量点模型
 ├── views/
 │   ├── __init__.py
@@ -103,17 +105,66 @@ class CoordinateSystem:
     def from_canvas_coords(self, canvas_x: int, canvas_y: int) -> tuple
 ```
 
-### 3.3 测量点数据模型
+### 3.3 用户位置数据模型 ✨ 双坐标系核心
 ```python
-class MeasurementPoint:
-    def __init__(self, x: float, y: float):
+class UserPosition:
+    """
+    用户位置模型 - 双坐标系功能的核心
+    表示用户在家居环境中的动态位置
+    """
+    def __init__(self, x: float = None, y: float = None):
+        self.x = x  # 用户在世界坐标系中的X位置
+        self.y = y  # 用户在世界坐标系中的Y位置
+        self.is_set = (x is not None and y is not None)
+        self.display_mode = 'world'  # 'world' 或 'dual'
+    
+    def set_position(self, x: float, y: float):
+        """设置用户位置并启用双坐标系模式"""
         self.x = x
         self.y = y
+        self.is_set = True
+        self.display_mode = 'dual'
+    
+    def clear_position(self):
+        """清除用户位置，回到单一世界坐标系"""
+        self.x = None
+        self.y = None
+        self.is_set = False
+        self.display_mode = 'world'
+    
+    def world_to_user_coords(self, world_x: float, world_y: float) -> tuple:
+        """世界坐标转换为用户相对坐标"""
+        if not self.is_set:
+            return world_x, world_y
+        return world_x - self.x, world_y - self.y
+    
+    def calculate_user_distance(self, world_x: float, world_y: float) -> float:
+        """计算点到用户位置的距离"""
+        if not self.is_set:
+            return 0.0
+        user_x, user_y = self.world_to_user_coords(world_x, world_y)
+        return math.sqrt(user_x**2 + user_y**2)
+```
+
+### 3.4 测量点数据模型
+```python
+class MeasurementPoint:
+    def __init__(self, x: float, y: float, user_position: UserPosition = None):
+        self.x = x
+        self.y = y
+        # 世界坐标系计算
         self.distance_to_origin = self._calculate_distance()
         self.angle_to_axis = self._calculate_min_angle()
+        # 用户坐标系计算（如果用户位置已设置）
+        self.user_position = user_position
+        if user_position and user_position.is_set:
+            self.user_x, self.user_y = user_position.world_to_user_coords(x, y)
+            self.distance_to_user = user_position.calculate_user_distance(x, y)
+            self.angle_to_user = self._calculate_user_angle()
     
     def _calculate_distance(self) -> float
     def _calculate_min_angle(self) -> float
+    def _calculate_user_angle(self) -> float
 ```
 
 ## 4. Matplotlib视图架构
@@ -137,6 +188,7 @@ class MatplotlibView:
     
     # 数据管理
     devices: List[Device]      # 设备列表
+    user_position: UserPosition # 用户位置 ✨ 双坐标系核心
     measurement_point: Optional[MeasurementPoint]
     sector_point: Optional[Tuple[float, float]]
 ```
@@ -185,17 +237,64 @@ def _setup_coordinate_system(self, x_range: float = 5.0, y_range: float = 5.0):
     self.axes.set_yticks(major_ticks)
 ```
 
-### 5.2 交互功能实现
+### 5.2 双坐标系交互实现 ✨ 核心功能
 ```python
 def _on_click(self, event):
-    """处理鼠标点击事件"""
+    """处理鼠标点击事件 - 支持双坐标系交互"""
     if event.button == 1:  # 左键
         if event.dblclick:  # 双击
             self._draw_sector(event.xdata, event.ydata, 90)
         else:  # 单击
-            self._create_measurement_point(event.xdata, event.ydata)
+            if self.user_position_setting_mode:
+                # 用户位置设置模式
+                self._set_user_position(event.xdata, event.ydata)
+            else:
+                # 普通测量模式（支持双坐标系）
+                self._create_measurement_point(event.xdata, event.ydata)
     elif event.button == 3:  # 右键
         self._clear_all_interactions()
+
+def _set_user_position(self, x: float, y: float):
+    """设置用户位置 - 启用双坐标系模式"""
+    self.user_position.set_position(x, y)
+    self._draw_user_position()
+    self._draw_user_coordinate_axes()
+    self.user_position_setting_mode = False
+    self._update_coordinate_display_mode()
+
+def _draw_user_position(self):
+    """绘制用户位置标记"""
+    if not self.user_position.is_set:
+        return
+    # 使用特殊图标标记用户位置
+    self.axes.scatter([self.user_position.x], [self.user_position.y], 
+                     marker='o', s=120, c='blue', 
+                     edgecolors='darkblue', linewidth=2,
+                     label='用户位置', zorder=10)
+
+def _draw_user_coordinate_axes(self):
+    """绘制用户坐标系辅助轴线"""
+    if not self.user_position.is_set:
+        return
+    # 绘制虚线坐标轴
+    self.axes.axhline(y=self.user_position.y, color='blue', 
+                     alpha=0.5, linestyle='--', linewidth=1)
+    self.axes.axvline(x=self.user_position.x, color='blue', 
+                     alpha=0.5, linestyle='--', linewidth=1)
+
+def _create_measurement_point(self, x: float, y: float):
+    """创建测量点 - 支持双坐标系信息"""
+    # 创建包含用户位置信息的测量点
+    measurement = MeasurementPoint(x, y, self.user_position)
+    
+    # 绘制测量点
+    self.axes.scatter([x], [y], c='green', s=80, zorder=5)
+    
+    # 绘制连线（到世界原点和用户位置）
+    self._draw_measurement_lines(x, y)
+    
+    # 显示双重信息框
+    self._show_dual_coordinate_info(measurement)
 ```
 
 ### 5.3 PNG导出功能
@@ -306,10 +405,24 @@ Matplotlib版本的实现完全超越了原有Canvas+PIL方案：
 - 更优秀的性能表现
 - 更专业的输出质量
 
-### 10.2 架构价值体现
+### 10.2 双坐标系架构创新 ✨ 核心价值
+- **"世界+用户"双坐标系设计**: 固定环境坐标 + 动态用户位置
+- **以用户为中心的交互模式**: 实时相对位置计算和显示
+- **UserPosition核心模型**: 统一的坐标转换和距离计算
+- **双重信息显示**: 同时展示绝对位置和相对位置关系
+
+### 10.3 架构价值体现
 - **MVC架构**: 完整的三层分离设计
 - **DeviceManager**: 统一数据管理创新
+- **UserPosition**: 双坐标系功能的数据模型核心
 - **观察者模式**: 自动数据同步机制
 - **Matplotlib集成**: 科学计算生态系统
 
-这个项目成功展示了如何将传统GUI应用升级为现代化的科学计算应用，为类似项目提供了宝贵的参考价值。 
+### 10.4 应用场景价值
+这个双坐标系设计完美契合智能家居场景：
+- **设备固定，用户移动**: 符合真实家居环境特点
+- **相对距离计算**: 帮助用户了解设备覆盖范围
+- **位置规划辅助**: 为设备布局提供科学依据
+- **交互直观**: 通过可视化方式理解空间关系
+
+这个项目成功展示了如何将传统GUI应用升级为现代化的科学计算应用，特别是双坐标系功能的创新设计，为智能家居规划工具提供了宝贵的架构参考。 

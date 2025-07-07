@@ -449,3 +449,136 @@ class TestRegression(unittest.TestCase):
 4. **风险可控**：分阶段迁移，业务逻辑保持不变
 
 您是否希望我开始实施第一阶段的迁移工作？我可以先创建MatplotlibView的基础实现，让您看到具体效果。
+
+
+
+
+Read file: docs/Appliance-Coordinates-GUI-V1-项目管理文档.md
+您提出的双坐标系UI设计方案非常棒！这是一个既实用又直观的设计。让我分析一下您的方案，并提出一些优化建议：
+
+## 🎯 您的设计方案分析
+
+### ✅ 方案优势
+1. **开关控制简单直观**：用户可以随时在单/双坐标系之间切换
+2. **视觉层次清晰**：蓝色主坐标系 + 紫色用户坐标系，颜色区分明确
+3. **交互逻辑一致**：开关状态决定测量行为，逻辑清晰
+4. **渐进式体验**：默认关闭，不会干扰新用户
+
+### 🚀 优化建议
+
+基于您的核心思路，我建议做一些细节优化：
+Ran tool
+## 📋 具体UI设计建议
+
+### 1. 坐标设置区域布局优化
+
+```
+┌─────────────────────────────────────────────────┐
+│  坐标显示范围设置                                │
+│                                                 │
+│  X轴范围 (±) [   5   ] 单位                    │
+│  Y轴范围 (±) [   5   ] 单位                    │
+│                                                 │
+│  ☐ 启用用户坐标系  [应用设置]                   │  ✨ 新增
+│                                                 │
+│  用户位置设置: (仅在开关打开时显示)              │  ✨ 新增
+│  X坐标 [  0.0  ]  Y坐标 [  0.0  ]              │
+│                    [设置用户位置]               │
+└─────────────────────────────────────────────────┘
+```
+
+### 2. 视觉设计优化建议
+
+**主坐标系 (蓝色系)**:
+```python
+WORLD_COORDINATE_COLORS = {
+    'grid': (0.690, 0.737, 0.773),      # 灰蓝色网格
+    'axis': (0.216, 0.278, 0.310),      # 深灰色坐标轴
+    'origin': (0.118, 0.533, 0.898),    # 蓝色原点
+}
+```
+
+**用户坐标系 (紫色系)**:
+```python
+USER_COORDINATE_COLORS = {
+    'grid': (0.800, 0.650, 0.900, 0.3), # 浅紫色半透明网格
+    'axis': (0.500, 0.200, 0.800, 0.6), # 紫色虚线坐标轴
+    'user_marker': (0.600, 0.200, 0.800), # 紫色人形标记
+    'measurement': (0.700, 0.300, 0.900), # 紫色测量点
+}
+```
+
+### 3. 交互逻辑优化
+
+```python
+class DualCoordinateMode:
+    def __init__(self):
+        self.user_coord_enabled = False
+        self.user_position = (0.0, 0.0)
+        
+    def toggle_user_coordinate(self, enabled: bool):
+        """切换用户坐标系开关"""
+        self.user_coord_enabled = enabled
+        if enabled:
+            self._show_user_position_input()
+            self._enable_user_coordinate_overlay()
+        else:
+            self._hide_user_position_input()
+            self._disable_user_coordinate_overlay()
+    
+    def handle_click_event(self, x, y, click_type):
+        """根据开关状态处理点击事件"""
+        if self.user_coord_enabled:
+            # 用户坐标系模式：计算相对距离角度
+            return self._calculate_from_user_position(x, y, click_type)
+        else:
+            # 世界坐标系模式：计算绝对距离角度
+            return self._calculate_from_world_origin(x, y, click_type)
+```
+
+### 4. 状态提示优化
+
+建议在画布左上角添加模式提示：
+
+```
+┌─ 当前模式: 世界坐标系 ─┐  (开关关闭时)
+└─────────────────────┘
+
+┌─ 当前模式: 用户坐标系 ─┐  (开关打开时)
+│ 用户位置: (2.5, 3.0)   │
+└─────────────────────┘
+```
+
+### 5. 人形图标设计建议
+
+```python
+def draw_user_marker(self, x, y):
+    """绘制用户位置标记"""
+    # 方案1: 简单圆形 + 标签
+    self.axes.scatter([x], [y], marker='o', s=150, 
+                     c='purple', edgecolors='darkpurple', 
+                     linewidth=3, label='用户位置', zorder=15)
+    
+    # 方案2: 人形图标 (更直观)
+    from matplotlib.patches import Circle
+    from matplotlib.patches import FancyBboxPatch
+    
+    # 头部
+    head = Circle((x, y+0.15), 0.05, color='purple')
+    # 身体
+    body = FancyBboxPatch((x-0.03, y-0.15), 0.06, 0.3, 
+                         boxstyle="round,pad=0.01", 
+                         facecolor='purple', alpha=0.8)
+```
+
+## 🔄 实施步骤建议
+
+基于我们的TODO列表，建议按以下顺序实施：
+
+1. **第一步**: 修改坐标设置区域UI，添加用户坐标系开关
+2. **第二步**: 实现用户位置输入框和设置按钮
+3. **第三步**: 实现紫色网格叠加层和人形标记
+4. **第四步**: 实现动态交互模式切换逻辑
+5. **第五步**: 完善视觉反馈和状态提示
+
+您觉得这个优化方案如何？我们是否可以开始第一步的实施？
