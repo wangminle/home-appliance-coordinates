@@ -15,7 +15,7 @@ matplotlib.use('Agg')  # 使用非GUI后端进行测试
 import matplotlib.pyplot as plt
 
 # 添加路径以导入项目模块
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev', 'src'))
 
 from views.matplotlib_view import MatplotlibView
 from controllers.matplotlib_controller import MatplotlibController

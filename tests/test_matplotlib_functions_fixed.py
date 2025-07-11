@@ -16,7 +16,7 @@ import time
 import math
 
 # 添加项目路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev', 'src'))
 
 try:
     from views.matplotlib_view import MatplotlibView

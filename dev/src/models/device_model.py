@@ -11,9 +11,11 @@ from typing import Dict, Any, Optional
 # 导入验证工具
 try:
     from utils.validation import Validator
+    from utils.layout_manager import DeviceInfoPosition
 except ImportError:
-    print("⚠️ 验证工具不可用")
+    print("⚠️ 验证工具或布局管理器不可用")
     Validator = None
+    DeviceInfoPosition = None
 
 
 class Device:
@@ -52,6 +54,11 @@ class Device:
         self.x = float(x)
         self.y = float(y)
         self.created_time = datetime.now()
+        
+        # 信息框位置状态管理 ✨ 智能避让功能
+        self.current_info_position: Optional[DeviceInfoPosition] = None  # 当前信息框位置
+        self.default_info_position: Optional[DeviceInfoPosition] = None  # 默认信息框位置
+        self.is_info_position_forced: bool = False  # 是否为强制避让位置
         
         # 验证数据有效性
         self._validate()
@@ -110,13 +117,23 @@ class Device:
         Returns:
             包含设备所有信息的字典
         """
-        return {
+        result = {
             'id': self.id,
             'name': self.name,
             'x': self.x,
             'y': self.y,
             'created_time': self.created_time.isoformat()
         }
+        
+        # 添加信息框位置状态（如果可用）
+        if DeviceInfoPosition is not None:
+            result.update({
+                'current_info_position': self.current_info_position.value if self.current_info_position else None,
+                'default_info_position': self.default_info_position.value if self.default_info_position else None,
+                'is_info_position_forced': self.is_info_position_forced
+            })
+        
+        return result
     
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> 'Device':
@@ -142,6 +159,18 @@ class Device:
                 device.created_time = datetime.fromisoformat(data['created_time'])
             except (ValueError, TypeError):
                 # 如果时间格式不正确，使用当前时间
+                pass
+        
+        # 恢复信息框位置状态（如果可用）
+        if DeviceInfoPosition is not None:
+            try:
+                if data.get('current_info_position'):
+                    device.current_info_position = DeviceInfoPosition(data['current_info_position'])
+                if data.get('default_info_position'):
+                    device.default_info_position = DeviceInfoPosition(data['default_info_position'])
+                device.is_info_position_forced = data.get('is_info_position_forced', False)
+            except (ValueError, KeyError):
+                # 如果位置数据不正确，保持默认值
                 pass
                 
         return device
@@ -180,4 +209,40 @@ class Device:
         """判断设备是否相等（基于ID）"""
         if not isinstance(other, Device):
             return False
-        return self.id == other.id 
+        return self.id == other.id
+    
+    def set_info_position(self, position: DeviceInfoPosition, is_forced: bool = False):
+        """
+        设置设备信息框位置
+        
+        Args:
+            position: 信息框位置
+            is_forced: 是否为强制避让位置
+        """
+        if DeviceInfoPosition is None:
+            return
+            
+        self.current_info_position = position
+        if not is_forced and self.default_info_position is None:
+            # 如果是第一次设置且不是强制位置，则记录为默认位置
+            self.default_info_position = position
+        self.is_info_position_forced = is_forced
+    
+    def reset_info_position_to_default(self):
+        """重置信息框位置到默认位置"""
+        if self.default_info_position is not None:
+            self.current_info_position = self.default_info_position
+            self.is_info_position_forced = False
+    
+    def get_info_position_status(self) -> Dict[str, Any]:
+        """
+        获取信息框位置状态信息
+        
+        Returns:
+            包含位置状态的字典
+        """
+        return {
+            'current_position': self.current_info_position.value if self.current_info_position else None,
+            'default_position': self.default_info_position.value if self.default_info_position else None,
+            'is_forced': self.is_info_position_forced
+        }

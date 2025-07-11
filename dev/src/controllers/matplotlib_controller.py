@@ -115,7 +115,7 @@ class MatplotlibController:
     
     def _on_canvas_double_click(self, x: float, y: float):
         """
-        处理画布左键双击事件：创建90度扇形
+        处理画布左键双击事件：创建90度扇形（以连线为平分线向两侧各45度）
         
         Args:
             x: 双击的X坐标

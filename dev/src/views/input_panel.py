@@ -46,8 +46,8 @@ class InputPanel:
         self.controller = controller
         
         # 组件引用
-        self.x_range_var = tk.StringVar(value="5")
-        self.y_range_var = tk.StringVar(value="5")
+        self.x_range_var = tk.StringVar(value="10")
+        self.y_range_var = tk.StringVar(value="10")
         
         # 用户坐标系相关 ✨ 双坐标系功能
         self.user_coord_enabled_var = tk.BooleanVar(value=False)
@@ -124,7 +124,7 @@ class InputPanel:
     
     def _create_range_section(self, parent):
         """
-        创建坐标范围设置区域
+        创建坐标范围设置区域 - 优化布局
         
         Args:
             parent: 父容器
@@ -137,59 +137,82 @@ class InputPanel:
         )
         range_frame.pack(fill='x', padx=10, pady=(10, 5))
         
-        # X轴范围设置
+        # 坐标范围输入区域（按要求重新布局）
+        
+        # X轴范围设置行
         x_frame = ttk.Frame(range_frame)
         x_frame.pack(fill='x', pady=(0, 5))
         
+        # X轴标签（左对齐）
         ttk.Label(
             x_frame,
             text="X轴范围:",
             font=('Arial', 12)
         ).pack(side='left')
         
-        x_entry = ttk.Entry(
-            x_frame,
-            textvariable=self.x_range_var,
-            width=8,
-            font=('Arial', 12)
-        )
-        x_entry.pack(side='right')
+        # 中间输入区域（距离标签20px）
+        x_input_frame = ttk.Frame(x_frame)
+        x_input_frame.pack(side='left', padx=(20, 0))
         
         ttk.Label(
-            x_frame,
+            x_input_frame,
             text="±",
             font=('Arial', 12)
-        ).pack(side='right', padx=(5, 2))
+        ).pack(side='left')
         
-        # Y轴范围设置
+        x_entry = ttk.Entry(
+            x_input_frame,
+            textvariable=self.x_range_var,
+            width=8,
+            font=('Arial', 12),
+            justify='center'
+        )
+        x_entry.pack(side='left', padx=(5, 0))
+        
+        # Y轴范围设置行
         y_frame = ttk.Frame(range_frame)
-        y_frame.pack(fill='x', pady=(0, 5))
+        y_frame.pack(fill='x', pady=(0, 10))
         
+        # Y轴标签（左对齐）
         ttk.Label(
             y_frame,
             text="Y轴范围:",
             font=('Arial', 12)
         ).pack(side='left')
         
-        y_entry = ttk.Entry(
-            y_frame,
-            textvariable=self.y_range_var,
-            width=8,
-            font=('Arial', 12)
-        )
-        y_entry.pack(side='right')
+        # 中间输入区域（距离标签20px）
+        y_input_frame = ttk.Frame(y_frame)
+        y_input_frame.pack(side='left', padx=(20, 0))
         
         ttk.Label(
-            y_frame,
+            y_input_frame,
             text="±",
             font=('Arial', 12)
-        ).pack(side='right', padx=(5, 2))
+        ).pack(side='left')
         
-        # 用户坐标系开关区域 ✨ 双坐标系核心功能
-        user_coord_frame = ttk.Frame(range_frame)
-        user_coord_frame.pack(fill='x', pady=(10, 5))
+        y_entry = ttk.Entry(
+            y_input_frame,
+            textvariable=self.y_range_var,
+            width=8,
+            font=('Arial', 12),
+            justify='center'
+        )
+        y_entry.pack(side='left', padx=(5, 0))
+        
+        # 应用设置按钮（右侧，与下方"设置用户位置"按钮左边缘对齐）
+        apply_btn = ttk.Button(
+            y_frame,
+            text="应用设置",
+            command=self._on_range_apply,
+            style='Custom.TButton'
+        )
+        # 使用padx来调整水平位置，使其与设置用户位置按钮左边缘对齐
+        apply_btn.pack(side='right', padx=(0, 0))
         
         # 用户坐标系开关
+        user_coord_frame = ttk.Frame(range_frame)
+        user_coord_frame.pack(fill='x', pady=(5, 10))
+        
         user_coord_check = ttk.Checkbutton(
             user_coord_frame,
             text="启用用户坐标系",
@@ -199,59 +222,15 @@ class InputPanel:
         )
         user_coord_check.pack(side='left')
         
-        # 应用按钮
-        apply_btn = ttk.Button(
-            user_coord_frame,
-            text="应用设置",
-            command=self._on_range_apply,
-            style='Custom.TButton'
-        )
-        apply_btn.pack(side='right')
-        
-        # 状态指示器区域 ✨ 第五步新增功能
-        status_frame = ttk.LabelFrame(
-            range_frame,
-            text="当前状态",
-            padding=(5, 5)
-        )
-        status_frame.pack(fill='x', pady=(10, 5))
-        
-        # 坐标系模式状态
-        self.coord_mode_label = ttk.Label(
-            status_frame,
-            text="坐标系模式: 世界坐标系",
-            font=('Arial', 10, 'bold'),
-            foreground='#2196F3'
-        )
-        self.coord_mode_label.pack(anchor='w')
-        
-        # 用户位置状态
-        self.user_pos_label = ttk.Label(
-            status_frame,
-            text="用户位置: 未设置",
-            font=('Arial', 10),
-            foreground='#666666'
-        )
-        self.user_pos_label.pack(anchor='w', pady=(2, 0))
-        
-        # 交互模式提示
-        self.interaction_hint_label = ttk.Label(
-            status_frame,
-            text="💡 左键单击测量距离，双击绘制扇形",
-            font=('Arial', 9),
-            foreground='#FF9800'
-        )
-        self.interaction_hint_label.pack(anchor='w', pady=(5, 0))
-        
-        # 用户位置设置区域（默认隐藏）
+        # 用户位置设置区域（默认隐藏，位于开关下方）
         self.user_position_frame = ttk.LabelFrame(
             range_frame,
             text="用户位置设置",
             padding=(5, 5)
         )
-        # 初始状态隐藏
+        # 初始状态隐藏，等待用户开关切换
         
-        # 用户坐标输入
+        # 用户坐标输入行
         user_pos_input_frame = ttk.Frame(self.user_position_frame)
         user_pos_input_frame.pack(fill='x', pady=(0, 5))
         
@@ -266,9 +245,10 @@ class InputPanel:
             user_pos_input_frame,
             textvariable=self.user_x_var,
             width=8,
-            font=('Arial', 10)
+            font=('Arial', 10),
+            justify='center'
         )
-        user_x_entry.pack(side='left', padx=(0, 10))
+        user_x_entry.pack(side='left', padx=(0, 15))
         
         # Y坐标输入
         ttk.Label(
@@ -281,18 +261,25 @@ class InputPanel:
             user_pos_input_frame,
             textvariable=self.user_y_var,
             width=8,
-            font=('Arial', 10)
+            font=('Arial', 10),
+            justify='center'
         )
-        user_y_entry.pack(side='left')
+        user_y_entry.pack(side='left', padx=(0, 15))
         
-        # 设置用户位置按钮
+        # 设置用户位置按钮（同一行右侧）
         set_user_pos_btn = ttk.Button(
-            self.user_position_frame,
+            user_pos_input_frame,
             text="设置用户位置",
             command=self._on_user_position_set,
             style='UserPosition.TButton'
         )
-        set_user_pos_btn.pack(pady=(5, 0))
+        set_user_pos_btn.pack(side='right')
+        
+        # 保存状态指示器区域的引用，稍后创建
+        self.status_frame = None
+        
+        # 在最后创建状态指示器区域，确保它在最下方
+        self._create_status_indicators(range_frame)
         
         # 添加提示信息
         tip_label = ttk.Label(
@@ -302,6 +289,48 @@ class InputPanel:
             foreground='#666666'
         )
         tip_label.pack(pady=(5, 0))
+    
+    def _create_status_indicators(self, parent):
+        """
+        创建状态指示器区域（始终在最下方）
+        
+        Args:
+            parent: 父容器
+        """
+        # 状态指示器区域
+        self.status_frame = ttk.LabelFrame(
+            parent,
+            text="当前状态",
+            padding=(5, 5)
+        )
+        self.status_frame.pack(fill='x', pady=(5, 0))
+        
+        # 坐标系模式状态
+        self.coord_mode_label = ttk.Label(
+            self.status_frame,
+            text="坐标系模式: 世界坐标系",
+            font=('Arial', 10, 'bold'),
+            foreground='#2196F3'
+        )
+        self.coord_mode_label.pack(anchor='w')
+        
+        # 用户位置状态
+        self.user_pos_label = ttk.Label(
+            self.status_frame,
+            text="用户位置: 未设置",
+            font=('Arial', 10),
+            foreground='#666666'
+        )
+        self.user_pos_label.pack(anchor='w', pady=(2, 0))
+        
+        # 交互模式提示
+        self.interaction_hint_label = ttk.Label(
+            self.status_frame,
+            text="💡 左键单击测量距离，双击绘制扇形",
+            font=('Arial', 9),
+            foreground='#FF9800'
+        )
+        self.interaction_hint_label.pack(anchor='w', pady=(5, 0))
     
     def _create_device_section(self, parent):
         """
@@ -693,7 +722,7 @@ class InputPanel:
         """
         重置所有输入为默认值
         """
-        # 重置坐标范围
+        # 重置坐标范围（更新为10.0）
         self.x_range_var.set("10.0")
         self.y_range_var.set("10.0")
         
@@ -738,7 +767,8 @@ class InputPanel:
             show: True显示，False隐藏
         """
         if show:
-            self.user_position_frame.pack(fill='x', pady=(5, 0))
+            # 将用户位置设置区域插入到状态指示器区域之前
+            self.user_position_frame.pack(fill='x', pady=(5, 0), before=self.status_frame)
         else:
             self.user_position_frame.pack_forget()
     

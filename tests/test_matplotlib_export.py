@@ -13,7 +13,7 @@ import matplotlib
 matplotlib.use('Agg')
 
 # 添加路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev', 'src'))
 
 from views.matplotlib_view import MatplotlibView
 from models.device_model import Device

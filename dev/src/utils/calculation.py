@@ -171,6 +171,159 @@ class Calculator:
         return 0.5 * radius * radius * angle_rad
     
     @staticmethod
+    def calculate_sector_bounding_box(center_x: float, center_y: float, 
+                                    radius: float, start_angle_deg: float, 
+                                    end_angle_deg: float) -> Tuple[float, float, float, float]:
+        """
+        计算扇形的精确边界框
+        
+        Args:
+            center_x, center_y: 扇形中心点坐标
+            radius: 扇形半径
+            start_angle_deg: 起始角度（度数）
+            end_angle_deg: 结束角度（度数）
+            
+        Returns:
+            边界框 (min_x, min_y, max_x, max_y)
+        """
+        # 确保角度在0-360度范围内
+        start_angle_deg = Calculator.normalize_angle(start_angle_deg)
+        end_angle_deg = Calculator.normalize_angle(end_angle_deg)
+        
+        # 如果结束角度小于起始角度，说明跨越了0度线
+        if end_angle_deg < start_angle_deg:
+            end_angle_deg += 360
+        
+        # 计算扇形的关键点
+        key_points = [(center_x, center_y)]  # 中心点必须包含
+        
+        # 添加起始和结束边界线端点
+        start_rad = math.radians(start_angle_deg)
+        end_rad = math.radians(end_angle_deg)
+        
+        start_x = center_x + radius * math.cos(start_rad)
+        start_y = center_y + radius * math.sin(start_rad)
+        end_x = center_x + radius * math.cos(end_rad)
+        end_y = center_y + radius * math.sin(end_rad)
+        
+        key_points.extend([(start_x, start_y), (end_x, end_y)])
+        
+        # 检查扇形是否包含四个主要方向（0°, 90°, 180°, 270°）
+        main_directions = [0, 90, 180, 270]
+        for direction in main_directions:
+            if start_angle_deg <= direction <= end_angle_deg or \
+               start_angle_deg <= direction + 360 <= end_angle_deg:
+                dir_rad = math.radians(direction)
+                dir_x = center_x + radius * math.cos(dir_rad)
+                dir_y = center_y + radius * math.sin(dir_rad)
+                key_points.append((dir_x, dir_y))
+        
+        # 从关键点中找出边界框
+        x_coords = [point[0] for point in key_points]
+        y_coords = [point[1] for point in key_points]
+        
+        return (min(x_coords), min(y_coords), max(x_coords), max(y_coords))
+
+    @staticmethod
+    def point_in_sector(px: float, py: float, center_x: float, center_y: float,
+                       radius: float, start_angle_deg: float, end_angle_deg: float) -> bool:
+        """
+        判断点是否在扇形内
+        
+        Args:
+            px, py: 待检测点坐标
+            center_x, center_y: 扇形中心点坐标
+            radius: 扇形半径
+            start_angle_deg: 起始角度（度数）
+            end_angle_deg: 结束角度（度数）
+            
+        Returns:
+            True如果点在扇形内，否则False
+        """
+        # 首先检查点是否在圆内
+        if not Calculator.point_in_circle(px, py, center_x, center_y, radius):
+            return False
+        
+        # 计算点相对于中心的角度
+        point_angle_deg = Calculator.calculate_angle_between_points(center_x, center_y, px, py)
+        
+        # 确保角度在0-360度范围内
+        start_angle_deg = Calculator.normalize_angle(start_angle_deg)
+        end_angle_deg = Calculator.normalize_angle(end_angle_deg)
+        
+        # 处理跨越0度线的情况
+        if end_angle_deg < start_angle_deg:
+            # 角度范围跨越0度线
+            return point_angle_deg >= start_angle_deg or point_angle_deg <= end_angle_deg
+        else:
+            # 正常角度范围
+            return start_angle_deg <= point_angle_deg <= end_angle_deg
+
+    @staticmethod
+    def sector_rectangle_overlap(center_x: float, center_y: float, radius: float,
+                               start_angle_deg: float, end_angle_deg: float,
+                               rect_x1: float, rect_y1: float, 
+                               rect_x2: float, rect_y2: float) -> float:
+        """
+        计算扇形与矩形的重叠程度
+        
+        Args:
+            center_x, center_y: 扇形中心点坐标
+            radius: 扇形半径
+            start_angle_deg: 起始角度（度数）
+            end_angle_deg: 结束角度（度数）
+            rect_x1, rect_y1: 矩形第一个角坐标
+            rect_x2, rect_y2: 矩形对角坐标
+            
+        Returns:
+            重叠比例（0.0-1.0），1.0表示完全重叠
+        """
+        # 确保矩形坐标正确排序
+        min_x, max_x = min(rect_x1, rect_x2), max(rect_x1, rect_x2)
+        min_y, max_y = min(rect_y1, rect_y2), max(rect_y1, rect_y2)
+        
+        # 矩形的四个角点
+        rect_corners = [
+            (min_x, min_y), (max_x, min_y),
+            (max_x, max_y), (min_x, max_y)
+        ]
+        
+        # 检查矩形角点是否在扇形内
+        corners_in_sector = 0
+        for corner in rect_corners:
+            if Calculator.point_in_sector(corner[0], corner[1], center_x, center_y, 
+                                        radius, start_angle_deg, end_angle_deg):
+                corners_in_sector += 1
+        
+        # 检查扇形的关键点是否在矩形内
+        start_rad = math.radians(start_angle_deg)
+        end_rad = math.radians(end_angle_deg)
+        
+        sector_points = [
+            (center_x, center_y),  # 中心点
+            (center_x + radius * math.cos(start_rad), center_y + radius * math.sin(start_rad)),  # 起始边端点
+            (center_x + radius * math.cos(end_rad), center_y + radius * math.sin(end_rad))  # 结束边端点
+        ]
+        
+        sector_points_in_rect = 0
+        for point in sector_points:
+            if Calculator.point_in_rectangle(point[0], point[1], min_x, min_y, max_x, max_y):
+                sector_points_in_rect += 1
+        
+        # 基于角点和关键点的重叠情况估算重叠程度
+        corner_overlap_ratio = corners_in_sector / 4.0
+        sector_overlap_ratio = sector_points_in_rect / 3.0
+        
+        # 综合重叠度计算（取较大值，因为任一方面有重叠都表示存在冲突）
+        overlap_ratio = max(corner_overlap_ratio, sector_overlap_ratio)
+        
+        # 如果有任何重叠，至少返回最小重叠值
+        if overlap_ratio > 0:
+            overlap_ratio = max(overlap_ratio, 0.1)  # 最小重叠阈值
+        
+        return overlap_ratio
+    
+    @staticmethod
     def rotate_point(x: float, y: float, cx: float, cy: float, angle_degrees: float) -> Tuple[float, float]:
         """
         绕指定点旋转一个点

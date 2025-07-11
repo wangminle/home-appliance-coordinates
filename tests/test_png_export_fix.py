@@ -14,7 +14,7 @@ from tkinter import filedialog
 from datetime import datetime
 
 # 添加项目根目录到Python路径
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev', 'src'))
 
 from controllers.matplotlib_controller import MatplotlibController
 from models.device_model import Device

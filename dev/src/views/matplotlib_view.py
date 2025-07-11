@@ -3,6 +3,7 @@
 Matplotlib坐标展示区视图
 
 基于Matplotlib实现的高性能绘图组件，替换原有的Canvas+Pillow方案
+优化版本：减少adjustText依赖，使用高性能原生布局算法
 """
 
 import tkinter as tk
@@ -22,13 +23,22 @@ plt.rcParams['axes.unicode_minus'] = False
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
+# 使用新的高性能布局管理器
+from utils.fast_layout import FastLayoutManager, LayoutElement, ElementType, BoundingBox
 
+# 可选导入adjustText（仅在需要时使用）
+try:
+    from adjustText import adjust_text
+    ADJUSTTEXT_AVAILABLE = True
+except ImportError:
+    ADJUSTTEXT_AVAILABLE = False
+    print("⚠️ adjustText库未安装，将使用高性能原生布局算法")
 
 class MatplotlibView:
     """
     基于Matplotlib的坐标展示区类
     
-    替换原有CanvasView，提供更强大的绘图能力和更简洁的代码实现
+    优化版本：使用高性能原生布局算法替代大部分adjustText功能
     """
     
     # 图形尺寸和样式配置
@@ -95,102 +105,231 @@ class MatplotlibView:
         self.user_position_artists = []  # 用户位置相关绘制对象 ✨ 双坐标系功能
         self.coordinate_info_artists = []  # 坐标信息显示对象 ✨ 第五步新增功能
         
+        # ✨ 高性能布局管理器（替代adjustText主要功能）
+        self.fast_layout_manager: Optional[FastLayoutManager] = None
+        
+        # ✨ adjustText智能避让系统（仅在复杂场景下使用）
+        self.text_objects = []  # 所有需要智能避让的文本对象
+        self.obstacle_objects = []  # 障碍物对象（扇形、连线等）
+        self.use_adjusttext_threshold = 6  # 文本数量超过此阈值时才使用adjustText
+        
         # 回调函数
         self.on_click_callback: Optional[Callable[[float, float], None]] = None
         self.on_right_click_callback: Optional[Callable[[], None]] = None
         self.on_mouse_move_callback: Optional[Callable[[float, float], None]] = None
         self.on_double_click_callback: Optional[Callable[[float, float], None]] = None
         
-        # 创建Matplotlib组件
-        self._create_matplotlib_components()
-        self._setup_coordinate_system()
-        self._bind_events()
+        # 初始化Matplotlib组件
+        self._setup_matplotlib()
         
-        print("✅ MatplotlibView初始化完成")
+        # 初始化高性能布局管理器
+        self._init_fast_layout_manager()
+        
+        print("✅ MatplotlibView初始化完成（高性能优化版）")
     
-    def _create_matplotlib_components(self):
-        """
-        创建Matplotlib核心组件
-        """
+    def _setup_matplotlib(self):
+        """设置Matplotlib组件"""
         # 创建Figure和Axes
         self.figure = Figure(figsize=self.FIGURE_SIZE, dpi=self.DPI, 
                            facecolor=self.COLORS['background'])
         self.axes = self.figure.add_subplot(111)
         
-        # 嵌入到tkinter框架
+        # 创建Tkinter Canvas
         self.canvas = FigureCanvasTkAgg(self.figure, self.parent_frame)
-        self.canvas.get_tk_widget().pack(fill='both', expand=True, padx=5, pady=5)
+        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
         
-        # 可选：添加工具栏（注释掉以保持简洁）
-        # self.toolbar = NavigationToolbar2Tk(self.canvas, self.parent_frame)
-        # self.toolbar.update()
+        # 绑定事件
+        self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
+        self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
+        self.canvas.mpl_connect('axes_leave_event', self._on_mouse_leave)
         
-        print("✅ Matplotlib组件创建完成")
+        # 初始化坐标系统
+        self._setup_coordinate_system(*self.current_range)
+        
+        print("✅ Matplotlib组件设置完成")
     
-    def _setup_coordinate_system(self, x_range: float = 10.0, y_range: float = 10.0):
+    def _init_fast_layout_manager(self):
+        """初始化高性能布局管理器"""
+        x_range, y_range = self.current_range
+        canvas_bounds = (-x_range, -y_range, x_range, y_range)
+        self.fast_layout_manager = FastLayoutManager(canvas_bounds)
+        print("🚀 高性能布局管理器初始化完成")
+    
+    def _setup_coordinate_system(self, x_range: float, y_range: float):
         """
-        设置坐标系统
+        设置坐标系统 ✨ 优化版本，支持整数步进
         
         Args:
-            x_range: X轴显示范围（±x_range）
-            y_range: Y轴显示范围（±y_range）
+            x_range: X轴范围（±x_range）
+            y_range: Y轴范围（±y_range）
         """
         self.current_range = (x_range, y_range)
         
-        # 设置坐标范围
+        # 清除之前的绘制内容
+        self.axes.clear()
+        
+        # 设置坐标轴范围
         self.axes.set_xlim(-x_range, x_range)
         self.axes.set_ylim(-y_range, y_range)
         
-        # 设置等比例显示
-        self.axes.set_aspect('equal', adjustable='box')
+        # 设置整数步进的刻度
+        x_ticks = list(range(int(-x_range), int(x_range) + 1))
+        y_ticks = list(range(int(-y_range), int(y_range) + 1))
+        self.axes.set_xticks(x_ticks)
+        self.axes.set_yticks(y_ticks)
         
-        # 配置网格 - 修复：按整数步进显示
-        # 计算合适的刻度间隔
-        major_ticks = np.arange(-int(x_range), int(x_range) + 1, 1)
-        self.axes.set_xticks(major_ticks)
-        self.axes.set_yticks(major_ticks)
-        
-        # 设置网格样式
-        self.axes.grid(True, alpha=0.5, color=self.COLORS['grid_line'], 
-                      linewidth=0.5, linestyle='-')
+        # 设置网格
+        self.axes.grid(True, color=self.COLORS['grid_line'], alpha=0.6, linewidth=0.8)
         
         # 设置坐标轴样式
-        self.axes.spines['left'].set_color(self.COLORS['axis_line'])
-        self.axes.spines['bottom'].set_color(self.COLORS['axis_line'])
-        self.axes.spines['left'].set_linewidth(2)
-        self.axes.spines['bottom'].set_linewidth(2)
-        
-        # 隐藏右侧和顶部边框
-        self.axes.spines['right'].set_visible(False)
-        self.axes.spines['top'].set_visible(False)
+        self.axes.axhline(y=0, color=self.COLORS['axis_line'], linewidth=1.5, alpha=0.9)
+        self.axes.axvline(x=0, color=self.COLORS['axis_line'], linewidth=1.5, alpha=0.9)
         
         # 设置背景色
         self.axes.set_facecolor(self.COLORS['background'])
-        
-        # 强调原点 - 修复：使用正确的坐标轴显示
-        self.axes.axhline(y=0, color=self.COLORS['axis_line'], linewidth=2, alpha=0.8)
-        self.axes.axvline(x=0, color=self.COLORS['axis_line'], linewidth=2, alpha=0.8)
-        
-        # 原点标记
-        self.axes.plot(0, 0, 'o', color=self.COLORS['origin_point'], 
-                      markersize=8, zorder=10, label='原点')
         
         # 设置标题和标签
         self.axes.set_xlabel('X 坐标', fontsize=12, color=self.COLORS['axis_line'])
         self.axes.set_ylabel('Y 坐标', fontsize=12, color=self.COLORS['axis_line'])
         
-        print(f"✅ 坐标系统设置完成：±{x_range} x ±{y_range}")
-    
-    def _bind_events(self):
-        """
-        绑定鼠标事件
-        """
-        # 绑定鼠标事件
-        self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
-        self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
-        self.canvas.mpl_connect('axes_leave_event', self._on_mouse_leave)
+        # 设置相等的宽高比
+        self.axes.set_aspect('equal', adjustable='box')
         
-        print("✅ 事件绑定完成")
+        # 绘制原点
+        self.axes.plot(0, 0, 'o', color=self.COLORS['origin_point'], 
+                      markersize=8, zorder=4, label='原点')
+        
+        print(f"✅ 坐标系统设置完成: ±{x_range} x ±{y_range}")
+    
+    def _should_use_adjusttext(self) -> bool:
+        """判断是否需要使用adjustText"""
+        if not ADJUSTTEXT_AVAILABLE:
+            return False
+        
+        # 只有在文本数量超过阈值且有复杂障碍物时才使用adjustText
+        text_count = len(self.text_objects)
+        has_complex_obstacles = len(self.obstacle_objects) > 0
+        
+        return text_count >= self.use_adjusttext_threshold and has_complex_obstacles
+    
+    def _apply_smart_text_adjustment(self):
+        """
+        智能文本避让：优先使用高性能原生算法，复杂场景下才使用adjustText
+        """
+        if not self.text_objects:
+            return
+        
+        try:
+            if self._should_use_adjusttext():
+                # 复杂场景：使用adjustText
+                self._apply_adjusttext_layout()
+                print("✅ 使用adjustText处理复杂布局")
+            else:
+                # 简单场景：使用高性能原生算法
+                self._apply_native_layout()
+                print("🚀 使用高性能原生布局算法")
+                
+        except Exception as e:
+            print(f"⚠️ 布局处理失败，回退到默认位置: {e}")
+    
+    def _apply_native_layout(self):
+        """使用高性能原生布局算法"""
+        if not self.fast_layout_manager:
+            return
+        
+        # 清空布局管理器
+        self.fast_layout_manager.clear_elements()
+        
+        # 🎯 修复：根据元素类型使用正确的锚点位置
+        for i, text_obj in enumerate(self.text_objects):
+            element_type = self._get_element_type_from_text(text_obj)
+            element_id = f"{element_type.value}_{id(text_obj)}"
+            
+            # 🎯 根据元素类型确定正确的锚点
+            if element_type == ElementType.DEVICE_INFO and i < len(self.devices):
+                # 设备标签：使用设备的实际坐标作为锚点
+                anchor_x = self.devices[i].x
+                anchor_y = self.devices[i].y
+            elif element_type == ElementType.MEASUREMENT_INFO and self.measurement_point:
+                # 测量信息：使用测量点坐标作为锚点
+                anchor_x = self.measurement_point.x
+                anchor_y = self.measurement_point.y
+            elif element_type == ElementType.USER_POSITION and self.user_position:
+                # 用户位置：使用用户位置坐标作为锚点
+                anchor_x, anchor_y = self.user_position
+            else:
+                # 其他情况：使用文本当前位置作为锚点（保持兼容性）
+                anchor_x = text_obj.get_position()[0]
+                anchor_y = text_obj.get_position()[1]
+            
+            # 计算最佳位置
+            new_x, new_y = self.fast_layout_manager.calculate_optimal_position(
+                anchor_x, anchor_y, element_type, element_id
+            )
+            
+            # 更新文本位置
+            text_obj.set_position((new_x, new_y))
+            
+            # 添加到布局管理器
+            box_width, box_height = self.fast_layout_manager.info_box_sizes.get(
+                element_type, (1.0, 0.5)
+            )
+            bbox = BoundingBox(
+                new_x - box_width/2, new_y - box_height/2,
+                new_x + box_width/2, new_y + box_height/2
+            )
+            element = LayoutElement(element_type, bbox, (anchor_x, anchor_y), 
+                                  element_id=element_id)
+            self.fast_layout_manager.add_element(element)
+    
+    def _apply_adjusttext_layout(self):
+        """使用adjustText进行复杂布局（仅在必要时）"""
+        # 清空障碍物列表，重新收集
+        self.obstacle_objects.clear()
+        
+        # 收集扇形障碍物
+        for artist in self.sector_artists:
+            if hasattr(artist, 'get_paths') or hasattr(artist, 'get_xy'):
+                self.obstacle_objects.append(artist)
+        
+        # 使用adjustText进行智能避让（减少参数，提升性能）
+        adjust_text(
+            self.text_objects,
+            ax=self.axes,
+            add_objects=self.obstacle_objects if self.obstacle_objects else None,
+            arrowprops=dict(
+                arrowstyle='->',
+                color='gray',
+                alpha=0.5,
+                lw=0.8
+            ),
+            # 简化的参数设置，提升性能
+            force_points=(0.2, 0.2),   # 减少推力
+            force_text=(0.3, 0.3),     # 减少推力
+            force_objects=(0.5, 0.5),  # 减少推力
+            max_move=0.3,              # 减少最大移动距离
+            only_move={'points': 'xy', 'text': 'xy'},
+        )
+    
+    def _get_element_type_from_text(self, text_obj) -> ElementType:
+        """从文本对象推断元素类型"""
+        text_content = text_obj.get_text()
+        
+        if '[用户]' in text_content:
+            return ElementType.USER_POSITION
+        elif '[世界]' in text_content or '[用户]' in text_content:
+            return ElementType.COORDINATE_INFO
+        elif '距离:' in text_content and '角度:' in text_content:
+            return ElementType.MEASUREMENT_INFO
+        else:
+            return ElementType.DEVICE_INFO
+    
+    def _clear_text_objects(self):
+        """清空文本对象列表"""
+        self.text_objects.clear()
+        self.obstacle_objects.clear()
+        if self.fast_layout_manager:
+            self.fast_layout_manager.clear_elements()
     
     def _on_mouse_click(self, event):
         """
@@ -248,7 +387,7 @@ class MatplotlibView:
     
     def _handle_double_click(self, x: float, y: float):
         """
-        处理左键双击：绘制以点击点为直径，原点为圆心的90度扇形
+        处理左键双击：绘制90度扇形（以连线为平分线向两侧各45度）
         """
         # 保存扇形参考点
         self.sector_point = (x, y)
@@ -264,15 +403,28 @@ class MatplotlibView:
     
     def _handle_right_click(self):
         """
-        处理右键单击：清除所有测量点和扇形
+        处理右键单击：清除所有测量点和扇形，并恢复设备信息框到默认位置
         """
         # 清除测量点
         self.measurement_point = None
         self.sector_point = None
         
+        # 恢复所有设备信息框到默认位置 ✨ 智能避让系统
+        self._reset_device_info_positions()
+        
         # 清除图形
         self._clear_measurement()
         self._clear_sector()
+        
+        # 清除布局管理器中的元素（除了设备信息框）
+        if self.fast_layout_manager:
+            self.fast_layout_manager.remove_element_by_type(ElementType.MEASUREMENT_INFO)
+            self.fast_layout_manager.remove_element_by_type(ElementType.COORDINATE_INFO)
+            self.fast_layout_manager.remove_element_by_type(ElementType.SECTOR)
+            self.fast_layout_manager.remove_element_by_type(ElementType.MEASUREMENT_LINE)
+        
+        # 重新绘制设备（应用默认位置）
+        self._draw_devices()
         
         # 更新显示
         self.canvas.draw_idle()
@@ -281,7 +433,23 @@ class MatplotlibView:
         if self.on_right_click_callback:
             self.on_right_click_callback()
         
-        print("✅ 清除所有测量点和扇形")
+        print("✅ 清除所有测量点和扇形，设备信息框已恢复默认位置")
+    
+    def _reset_device_info_positions(self):
+        """
+        重置所有设备信息框位置到默认位置
+        """
+        if not self.devices:
+            return
+        
+        reset_count = 0
+        for device in self.devices:
+            if device.is_info_position_forced:
+                device.reset_info_position_to_default()
+                reset_count += 1
+        
+        if reset_count > 0:
+            print(f"🔄 已重置 {reset_count} 个设备信息框到默认位置")
     
     def _on_mouse_move(self, event):
         """
@@ -370,49 +538,71 @@ class MatplotlibView:
     
     def _draw_devices(self):
         """
-        绘制所有设备点
+        绘制所有设备点（使用高性能原生布局算法）
         """
         # 清除之前的设备图形
         self._clear_devices()
-        
+
         if not self.devices:
             self.canvas.draw_idle()
             return
-        
+
         # 提取坐标和名称
         x_coords = [device.x for device in self.devices]
         y_coords = [device.y for device in self.devices]
-        
+
         # 绘制设备点
         scatter = self.axes.scatter(x_coords, y_coords, 
                                   c=self.COLORS['device_point'], 
                                   s=50, zorder=5, alpha=0.8,
                                   edgecolors='white', linewidth=1)
         self.device_artists.append(scatter)
-        
-        # 添加设备标签
+
+        # ✨ 使用高性能原生布局算法创建设备标签
         for device in self.devices:
-            annotation = self.axes.annotate(
-                f'{device.name}\n({device.x:.3f}, {device.y:.3f})',
-                xy=(device.x, device.y),
-                xytext=(10, 10),
-                textcoords='offset points',
-                bbox=dict(boxstyle='round,pad=0.3', 
-                         facecolor='#ffffe0',  # 浅黄色背景 (对照HTML)
-                         edgecolor=self.COLORS['device_point'],
-                         alpha=0.9),
+            label_text = f'{device.name}\n({device.x:.3f}, {device.y:.3f})'
+            
+            # 使用高性能布局管理器计算位置
+            if self.fast_layout_manager:
+                text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
+                    device.x, device.y, ElementType.DEVICE_INFO, f"device_{device.name}"
+                )
+            else:
+                # 回退到简单偏移
+                text_x = device.x + (1.0 if device.x < 0 else -1.0)
+                text_y = device.y + 0.8
+            
+            # 创建文本对象
+            text = self.axes.text(
+                text_x, text_y,
+                label_text,
+                bbox=dict(
+                    boxstyle='round,pad=0.3', 
+                    facecolor='#ffffe0',  # 浅黄色背景 (对照HTML)
+                    edgecolor=self.COLORS['device_point'],
+                    alpha=0.9
+                ),
                 fontsize=9,
                 color=self.COLORS['device_point'],
-                zorder=6
+                zorder=6,
+                ha='center', 
+                va='center'
             )
-            self.device_artists.append(annotation)
+            
+            # 添加到艺术家列表和文本对象列表
+            self.device_artists.append(text)
+            self.text_objects.append(text)
+        
+        # 应用智能避让（仅在必要时）
+        if len(self.text_objects) > 0:
+            self._apply_smart_text_adjustment()
         
         # 更新显示
         self.canvas.draw_idle()
     
     def _draw_measurement(self):
         """
-        绘制测量点和测量线 ✨ 支持双坐标系模式
+        绘制测量点和测量线 ✨ 支持双坐标系模式，使用高性能布局
         """
         if not self.measurement_point:
             return
@@ -455,30 +645,47 @@ class MatplotlibView:
         # 添加坐标系模式标识到信息中
         info_text = f"[{coord_mode}]\n" + '\n'.join(info_lines)
         
-        # 计算信息框位置 - 对照HTML的位置策略
-        info_x = x + 0.3 if x < self.current_range[0] * 0.5 else x - 0.3
-        info_y = y + 0.3 if y < self.current_range[1] * 0.5 else y - 0.3
+        # ✨ 使用高性能布局管理器计算位置
+        if self.fast_layout_manager:
+            text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
+                x, y, ElementType.MEASUREMENT_INFO, "measurement"
+            )
+        else:
+            # 回退到简单偏移
+            text_x = x + 1.0
+            text_y = y + 1.0
         
-        annotation = self.axes.annotate(
+        # 创建测量信息框
+        text = self.axes.text(
+            text_x, text_y,
             info_text,
-            xy=(x, y),
-            xytext=(info_x, info_y),
-            bbox=dict(boxstyle='round,pad=0.5', 
-                     facecolor=self.COLORS['label_bg'], 
-                     edgecolor=self.COLORS['label_border'],
-                     alpha=0.9),
+            bbox=dict(
+                boxstyle='round,pad=0.5', 
+                facecolor=self.COLORS['label_bg'], 
+                edgecolor=self.COLORS['label_border'],
+                alpha=0.9
+            ),
             fontsize=9,
             color=self.COLORS['text_color'],
-            zorder=8
+            zorder=8,
+            ha='center', 
+            va='center'
         )
-        self.measurement_artists.append(annotation)
+        
+        # 添加到艺术家列表和文本对象列表
+        self.measurement_artists.append(text)
+        self.text_objects.append(text)
+        
+        # 应用智能避让（重新处理所有文本）
+        if len(self.text_objects) > 0:
+            self._apply_smart_text_adjustment()
         
         # 更新显示
         self.canvas.draw_idle()
     
     def _draw_sector(self):
         """
-        绘制90度扇形：支持动态交互模式 ✨ 根据坐标系状态选择中心点
+        绘制90度扇形：以连线为平分线向两侧各45度 ✨ 根据坐标系状态选择中心点
         """
         if not self.sector_point:
             return
@@ -504,13 +711,14 @@ class MatplotlibView:
         if radius < 0.01:  # 避免在中心点绘制
             return
         
-        # 计算起始角度 (点击点相对于中心点的角度)
-        start_angle_rad = math.atan2(y - center_y, x - center_x)
-        start_angle_deg = math.degrees(start_angle_rad)
+        # 计算中心角度 (点击点相对于中心点的角度)
+        center_angle_rad = math.atan2(y - center_y, x - center_x)
+        center_angle_deg = math.degrees(center_angle_rad)
         
-        # 90度扇形：从start_angle开始，逆时针90度
-        # 对照HTML中的扇形实现：startAngle = Math.PI, endAngle = 1.5 * Math.PI
-        end_angle_deg = start_angle_deg + 90
+        # 90度扇形：以连线为平分线，向两侧各45度
+        # 起始角度 = 中心角度 - 45度，结束角度 = 中心角度 + 45度
+        start_angle_deg = center_angle_deg - 45
+        end_angle_deg = center_angle_deg + 45
         
         # 创建扇形路径（以动态中心点为基准）
         theta = np.linspace(math.radians(start_angle_deg), 
@@ -534,10 +742,28 @@ class MatplotlibView:
                                    linewidth=2, zorder=3)[0]
         self.sector_artists.append(sector_edge)
         
+        # 注册扇形区域到布局管理器（简化版本）
+        if self.fast_layout_manager:
+            # 计算扇形的近似边界框
+            margin = 0.5
+            sector_bbox = BoundingBox(
+                center_x - radius - margin,
+                center_y - radius - margin, 
+                center_x + radius + margin,
+                center_y + radius + margin
+            )
+            
+            # 创建扇形布局元素
+            sector_element = LayoutElement(
+                ElementType.SECTOR, sector_bbox, (center_x, center_y),
+                priority=2, movable=False, element_id="sector"
+            )
+            self.fast_layout_manager.add_element(sector_element)
+        
         # 更新显示
         self.canvas.draw_idle()
         
-        print(f"✅ 绘制扇形: 半径={radius:.3f}, 起始角度={start_angle_deg:.1f}°")
+        print(f"✅ 绘制扇形: 半径={radius:.3f}, 中心角度={center_angle_deg:.1f}°")
     
     def _clear_devices(self):
         """
@@ -546,9 +772,16 @@ class MatplotlibView:
         for artist in self.device_artists:
             try:
                 artist.remove()
+                # 同时从文本对象列表中移除
+                if artist in self.text_objects:
+                    self.text_objects.remove(artist)
             except ValueError:
                 pass  # 可能已经被移除
         self.device_artists.clear()
+        
+        # 清除布局管理器中的设备元素（保留备用）
+        if self.fast_layout_manager:
+            self.fast_layout_manager.remove_element_by_type(ElementType.DEVICE_INFO)
     
     def _clear_measurement(self):
         """
@@ -557,9 +790,16 @@ class MatplotlibView:
         for artist in self.measurement_artists:
             try:
                 artist.remove()
+                # 同时从文本对象列表中移除
+                if artist in self.text_objects:
+                    self.text_objects.remove(artist)
             except ValueError:
                 pass
         self.measurement_artists.clear()
+        
+        # 清除布局管理器中的测量元素（保留备用）
+        if self.fast_layout_manager:
+            self.fast_layout_manager.remove_element_by_type(ElementType.MEASUREMENT_INFO)
     
     def _clear_sector(self):
         """
@@ -571,6 +811,10 @@ class MatplotlibView:
             except ValueError:
                 pass
         self.sector_artists.clear()
+        
+        # 清除布局管理器中的扇形元素
+        if self.fast_layout_manager:
+            self.fast_layout_manager.remove_element_by_type(ElementType.SECTOR)
     
     def set_coordinate_range(self, x_range: float, y_range: float):
         """
@@ -583,6 +827,9 @@ class MatplotlibView:
         try:
             # 清除所有绘制对象
             self.axes.clear()
+            
+            # 重新初始化布局管理器
+            self._init_fast_layout_manager()
             
             # 重新设置坐标系统
             self._setup_coordinate_system(x_range, y_range)
@@ -635,6 +882,9 @@ class MatplotlibView:
         self.devices.clear()
         self.measurement_point = None
         self.sector_point = None
+        
+        # 清除adjustText相关对象
+        self._clear_text_objects()
         
         # 清除所有图形
         self._clear_devices()
@@ -845,17 +1095,45 @@ class MatplotlibView:
                                         linewidth=2, zorder=16, alpha=1.0)
         self.user_position_artists.append(person_marker)
         
-        # 添加用户位置文字标签 ✨ 第五步视觉优化
-        text = self.axes.text(x, y + 0.7, f'[用户] 位置\n({x:.1f}, {y:.1f})', 
-                            fontsize=12, fontweight='bold',
-                            color=self.COLORS['user_text'],
-                            ha='center', va='bottom', zorder=17,
-                            bbox=dict(boxstyle="round,pad=0.5",
-                                    facecolor='#f8f4ff',  # 浅紫色背景
-                                    edgecolor=self.COLORS['user_marker'],
-                                    linewidth=2.5,
-                                    alpha=0.95))  # 移除不兼容的shadow参数
+        # ✨ 添加用户位置文字标签 (使用高性能布局管理器)
+        label_text = f'[用户] 位置\n({x:.1f}, {y:.1f})'
+        
+        # 使用高性能布局管理器计算位置
+        if self.fast_layout_manager:
+            text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
+                x, y, ElementType.USER_POSITION, "user_position"
+            )
+        else:
+            # 回退到简单偏移
+            text_x = x + 1.2
+            text_y = y + 0.8
+        
+        # 创建文本对象
+        text = self.axes.text(
+            text_x, text_y,
+            label_text, 
+            fontsize=12, 
+            fontweight='bold',
+            color=self.COLORS['user_text'],
+            ha='center', 
+            va='center', 
+            zorder=17,
+            bbox=dict(
+                boxstyle="round,pad=0.5",
+                facecolor='#f8f4ff',  # 浅紫色背景
+                edgecolor=self.COLORS['user_marker'],
+                linewidth=2.5,
+                alpha=0.95
+            )
+        )
+        
+        # 添加到艺术家列表和文本对象列表
         self.user_position_artists.append(text)
+        self.text_objects.append(text)
+        
+        # 应用智能避让（重新处理所有文本）
+        if len(self.text_objects) > 0:
+            self._apply_smart_text_adjustment()
         
         print(f"✨ 绘制用户位置标记: ({x:.3f}, {y:.3f})")
     
@@ -908,9 +1186,17 @@ class MatplotlibView:
         for artist in self.user_position_artists:
             try:
                 artist.remove()
+                # 同时从文本对象列表中移除
+                if artist in self.text_objects:
+                    self.text_objects.remove(artist)
             except ValueError:
                 pass  # 如果对象已被移除，忽略错误
         self.user_position_artists.clear()
+        
+        # 清除布局管理器中的用户位置元素（保留备用）
+        if self.fast_layout_manager:
+            self.fast_layout_manager.remove_element_by_type(ElementType.USER_POSITION)
+        
         print("✨ 清除用户坐标系叠加层")
     
     def _clear_user_position_marker(self):
@@ -986,23 +1272,50 @@ class MatplotlibView:
         
         self._last_coordinate_info_text = info_text
         
-        # 智能计算信息框位置（四象限适应性定位）✨ 交互体验优化
-        x_range, y_range = self.current_range
-        
-        # 根据鼠标位置选择最佳信息框位置，避免遮挡和超界
-        if x > x_range * 0.6:  # 鼠标在右侧
-            info_x = x - 2.0  # 信息框显示在左侧
-        else:  # 鼠标在左侧
-            info_x = x + 0.8  # 信息框显示在右侧
-        
-        if y > y_range * 0.6:  # 鼠标在上方
-            info_y = y - 1.5  # 信息框显示在下方
-        else:  # 鼠标在下方
-            info_y = y + 0.8  # 信息框显示在上方
-        
-        # 确保信息框不超出坐标范围
-        info_x = max(-x_range + 0.5, min(info_x, x_range - 2.5))
-        info_y = max(-y_range + 0.5, min(info_y, y_range - 1.5))
+        # 使用智能布局管理器计算信息框位置
+        if self.fast_layout_manager:
+            # 先移除之前的坐标信息元素，避免累积
+            self.fast_layout_manager.remove_element_by_type(ElementType.COORDINATE_INFO)
+            
+            # 计算首选偏移位置（四象限适应性定位）
+            x_range, y_range = self.current_range
+            preferred_offset_x = -2.0 if x > x_range * 0.6 else 0.8
+            preferred_offset_y = -1.5 if y > y_range * 0.6 else 0.8
+            preferred_offset = (preferred_offset_x, preferred_offset_y)
+            
+            info_x, info_y = self.fast_layout_manager.calculate_optimal_position(
+                x, y, ElementType.COORDINATE_INFO, "coordinate_info", preferred_offset
+            )
+            
+            # 注册元素到布局管理器（临时元素，优先级较低）
+            box_width, box_height = 2.8, 1.5  # 坐标信息框尺寸
+            coordinate_bbox = BoundingBox(
+                info_x - box_width/2, info_y - box_height/2,
+                info_x + box_width/2, info_y + box_height/2
+            )
+            coordinate_element = LayoutElement(
+                ElementType.COORDINATE_INFO, coordinate_bbox, (x, y),
+                priority=3, movable=True, element_id="coordinate_info"
+            )
+            self.fast_layout_manager.add_element(coordinate_element)
+        else:
+            # 回退到原始计算方法
+            x_range, y_range = self.current_range
+            
+            # 根据鼠标位置选择最佳信息框位置，避免遮挡和超界
+            if x > x_range * 0.6:  # 鼠标在右侧
+                info_x = x - 2.0  # 信息框显示在左侧
+            else:  # 鼠标在左侧
+                info_x = x + 0.8  # 信息框显示在右侧
+            
+            if y > y_range * 0.6:  # 鼠标在上方
+                info_y = y - 1.5  # 信息框显示在下方
+            else:  # 鼠标在下方
+                info_y = y + 0.8  # 信息框显示在上方
+            
+            # 确保信息框不超出坐标范围
+            info_x = max(-x_range + 0.5, min(info_x, x_range - 2.5))
+            info_y = max(-y_range + 0.5, min(info_y, y_range - 1.5))
         
         # 绘制坐标信息框 ✨ 第五步视觉优化
         annotation = self.axes.annotate(
