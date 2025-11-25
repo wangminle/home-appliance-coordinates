@@ -2,7 +2,8 @@
 """
 高性能原生布局管理器
 
-替代adjustText库的高性能布局解决方案，专门针对家居设备坐标绘制场景优化
+简洁高效的标注避让方案，专门针对家居设备坐标绘制场景优化
+核心算法：智能离散槽位搜索 + 锚点距离惩罚
 """
 
 from enum import Enum
@@ -32,7 +33,7 @@ class BoundingBox:
         return not (self.x_max <= other.x_min or 
                    other.x_max <= self.x_min or
                    self.y_max <= other.y_min or 
-                   other.y_min <= self.y_max)
+                   other.y_max <= self.y_min)
     
     def overlap_area(self, other: 'BoundingBox') -> float:
         """计算与另一个边界框的重叠面积"""
@@ -64,14 +65,19 @@ class LayoutElement:
     """布局元素类"""
     def __init__(self, element_type: ElementType, bounding_box: BoundingBox, 
                  anchor_point: Tuple[float, float], priority: int = 5, 
-                 movable: bool = True, element_id: str = ""):
+                 movable: bool = True, element_id: str = "", static: bool = False):
         self.element_type = element_type
         self.bounding_box = bounding_box
         self.anchor_point = anchor_point
         self.priority = priority
         self.movable = movable
         self.element_id = element_id
+        self.static = static  # 是否为静态元素（不会被清除动态元素时移除）
         self.creation_time = time.time()
+        
+        # 当前位置（用于力导向布局计算）
+        self.current_x = (bounding_box.x_min + bounding_box.x_max) / 2
+        self.current_y = (bounding_box.y_min + bounding_box.y_max) / 2
 
 class FastLayoutManager:
     """
@@ -126,6 +132,13 @@ class FastLayoutManager:
         """清除所有元素"""
         self.elements.clear()
         self._invalidate_cache()
+    
+    def clear_dynamic_elements(self):
+        """清除所有动态元素（保留静态元素如扇形等障碍物）"""
+        original_count = len(self.elements)
+        self.elements = [e for e in self.elements if e.static]
+        if len(self.elements) != original_count:
+            self._invalidate_cache()
     
     def add_element(self, element: LayoutElement):
         """添加布局元素"""
@@ -349,4 +362,126 @@ class FastLayoutManager:
             "overlaps": overlap_count,
             "cache_size": len(self._position_cache),
             "cache_valid": self._cache_valid
-        } 
+        }
+    
+    def compute_layout(self, iterations: int = 50):
+        """
+        执行力导向布局计算
+        
+        使用简化的力导向算法调整可移动元素的位置，避免重叠
+        
+        Args:
+            iterations: 迭代次数
+        """
+        movable_elements = [e for e in self.elements if e.movable and not e.static]
+        
+        if not movable_elements:
+            return
+        
+        # 力导向参数
+        repulsion_strength = 0.3  # 排斥力强度
+        anchor_attraction = 0.2   # 锚点吸引力强度
+        damping = 0.85            # 阻尼系数
+        
+        for iteration in range(iterations):
+            max_movement = 0.0
+            
+            for element in movable_elements:
+                force_x = 0.0
+                force_y = 0.0
+                
+                # 计算排斥力（来自其他元素）
+                for other in self.elements:
+                    if other is element:
+                        continue
+                    
+                    dx = element.current_x - other.current_x
+                    dy = element.current_y - other.current_y
+                    dist = math.sqrt(dx*dx + dy*dy)
+                    
+                    if dist < 0.01:
+                        dist = 0.01
+                    
+                    # 检查是否有重叠
+                    elem_bbox = self._get_bbox_at_position(element, element.current_x, element.current_y)
+                    other_bbox = self._get_bbox_at_position(other, other.current_x, other.current_y)
+                    
+                    if elem_bbox.overlaps(other_bbox):
+                        # 有重叠时，施加较强的排斥力
+                        repulsion = repulsion_strength * 3.0 / max(dist, 0.1)
+                        force_x += repulsion * dx / dist
+                        force_y += repulsion * dy / dist
+                    elif dist < 2.0:
+                        # 接近时，施加较弱的排斥力
+                        repulsion = repulsion_strength * 0.5 / dist
+                        force_x += repulsion * dx / dist
+                        force_y += repulsion * dy / dist
+                
+                # 计算锚点吸引力
+                anchor_x, anchor_y = element.anchor_point
+                dx_anchor = anchor_x - element.current_x
+                dy_anchor = anchor_y - element.current_y
+                anchor_dist = math.sqrt(dx_anchor*dx_anchor + dy_anchor*dy_anchor)
+                
+                if anchor_dist > 0.5:
+                    # 超过一定距离时，吸引回锚点附近
+                    force_x += anchor_attraction * dx_anchor
+                    force_y += anchor_attraction * dy_anchor
+                
+                # 应用力（带阻尼）
+                move_x = force_x * damping
+                move_y = force_y * damping
+                
+                # 限制单次移动距离
+                max_move = 0.5
+                move_dist = math.sqrt(move_x*move_x + move_y*move_y)
+                if move_dist > max_move:
+                    move_x = move_x / move_dist * max_move
+                    move_y = move_y / move_dist * max_move
+                
+                # 更新位置
+                new_x = element.current_x + move_x
+                new_y = element.current_y + move_y
+                
+                # 边界约束
+                margin = 0.5
+                new_x = max(self.canvas_bounds.x_min + margin, 
+                           min(new_x, self.canvas_bounds.x_max - margin))
+                new_y = max(self.canvas_bounds.y_min + margin, 
+                           min(new_y, self.canvas_bounds.y_max - margin))
+                
+                movement = math.sqrt((new_x - element.current_x)**2 + 
+                                    (new_y - element.current_y)**2)
+                max_movement = max(max_movement, movement)
+                
+                element.current_x = new_x
+                element.current_y = new_y
+            
+            # 如果移动量很小，提前结束
+            if max_movement < 0.01:
+                break
+        
+        # 使缓存失效
+        self._invalidate_cache()
+    
+    def _get_bbox_at_position(self, element: LayoutElement, x: float, y: float) -> BoundingBox:
+        """
+        获取元素在指定位置的边界框
+        
+        Args:
+            element: 布局元素
+            x: 中心X坐标
+            y: 中心Y坐标
+            
+        Returns:
+            边界框对象
+        """
+        width = element.bounding_box.x_max - element.bounding_box.x_min
+        height = element.bounding_box.y_max - element.bounding_box.y_min
+        
+        return BoundingBox(
+            x - width/2,
+            y - height/2,
+            x + width/2,
+            y + height/2
+        ) 

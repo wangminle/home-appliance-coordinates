@@ -55,6 +55,8 @@
 │   ├── __init__.py
 │   ├── device_model.py     # 设备数据模型
 │   ├── device_manager.py   # 设备管理器 (核心创新)
+│   ├── project_manager.py  # 项目文件管理器 🆕 V1.1新增
+│   ├── config_manager.py   # 配置管理器 🆕 V1.1新增
 │   ├── coordinate_model.py # 坐标系统模型
 │   ├── user_position_model.py # 用户位置模型 ✨ 双坐标系核心
 │   └── measurement_model.py # 测量点模型
@@ -65,7 +67,7 @@
 │   └── input_panel.py      # 右侧输入面板视图
 ├── controllers/
 │   ├── __init__.py
-│   └── matplotlib_controller.py # Matplotlib控制器
+│   └── matplotlib_controller.py # Matplotlib控制器（集成文件管理）
 └── utils/
     ├── __init__.py
     ├── calculation.py      # 数学计算模块
@@ -88,6 +90,99 @@ class Device:
     def from_dict(cls, data: dict) -> 'Device'
     def validate(self) -> bool
 ```
+
+### 3.2 项目管理数据模型 🆕 V1.1新增
+
+#### ProjectManager类
+```python
+class ProjectManager:
+    """
+    项目文件管理器
+    
+    负责项目文件的保存、加载、导入和导出功能
+    支持JSON格式的项目文件和CSV格式的设备列表
+    """
+    
+    PROJECT_VERSION = "1.0"
+    PROJECT_EXTENSION = ".apc"
+    CSV_EXTENSION = ".csv"
+    
+    def __init__(self):
+        self.current_project_path: Optional[Path] = None
+        self.current_project_name: str = "未命名项目"
+        self.is_modified: bool = False
+    
+    # 项目信息管理
+    def set_project_path(file_path: str) -> None
+    def mark_modified() -> None
+    def get_project_title() -> str
+    
+    # JSON项目文件操作
+    def save_project(file_path, devices, coordinate_settings, 
+                    user_coord_settings, project_info) -> Tuple[bool, str]
+    def load_project(file_path) -> Tuple[bool, str, Optional[Dict]]
+    
+    # CSV设备列表操作
+    def export_devices_to_csv(file_path, devices) -> Tuple[bool, str]
+    def import_devices_from_csv(file_path) -> Tuple[bool, str, List[Device]]
+    
+    # 私有辅助方法
+    def _build_project_data(...) -> Dict[str, Any]
+    def _validate_project_data(data) -> Tuple[bool, str]
+    def _parse_devices(devices_data) -> List[Device]
+    
+    # 工具方法
+    @staticmethod
+    def get_default_project_dir() -> Path
+    @staticmethod
+    def get_project_info_from_file(file_path) -> Optional[Dict[str, str]]
+```
+
+#### ConfigManager类
+```python
+class ConfigManager:
+    """
+    应用配置管理器
+    
+    管理应用程序的持久化配置数据
+    """
+    
+    MAX_RECENT_FILES = 10
+    DEFAULT_AUTOSAVE_INTERVAL = 300  # 5分钟
+    
+    def __init__(self):
+        self.config_dir = self._get_config_dir()
+        self.config_file = self.config_dir / "config.json"
+        self.config_data = self._load_config()
+    
+    # 配置文件操作
+    def _get_config_dir() -> Path
+    def _load_config() -> Dict[str, Any]
+    def _save_config() -> bool
+    def _get_default_config() -> Dict[str, Any]
+    
+    # 最近文件管理
+    def get_recent_files() -> List[str]
+    def add_recent_file(file_path) -> bool
+    def remove_recent_file(file_path) -> bool
+    def clear_recent_files() -> bool
+    
+    # 自动保存设置
+    def is_autosave_enabled() -> bool
+    def set_autosave_enabled(enabled) -> bool
+    def get_autosave_interval() -> int
+    def set_autosave_interval(interval) -> bool
+    def get_autosave_dir() -> Path
+    def get_autosave_file_path() -> Path
+    def get_latest_autosave_file() -> Optional[Path]
+    def clean_old_autosave_files(keep_count) -> int
+    
+    # 其他设置
+    def get_preference(key, default) -> Any
+    def set_preference(key, value) -> bool
+```
+
+### 3.3 坐标系统模型
 
 ### 3.2 坐标系统模型
 ```python

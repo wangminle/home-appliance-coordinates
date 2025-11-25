@@ -910,4 +910,41 @@ class InputPanel:
         """
         # 更新输入框显示的值，确保UI与实际状态同步
         self.x_range_var.set(f"{x_range:.1f}")
-        self.y_range_var.set(f"{y_range:.1f}") 
+        self.y_range_var.set(f"{y_range:.1f}")
+    
+    # === 项目加载辅助方法（用于从文件恢复状态）===
+    
+    def set_coordinate_range(self, x_range: float, y_range: float):
+        """
+        设置坐标范围（用于项目加载）
+        
+        Args:
+            x_range: X轴范围
+            y_range: Y轴范围
+        """
+        self.x_range_var.set(f"{x_range:.1f}")
+        self.y_range_var.set(f"{y_range:.1f}")
+    
+    def set_user_coord_enabled(self, enabled: bool):
+        """
+        设置用户坐标系启用状态（用于项目加载）
+        
+        Args:
+            enabled: 是否启用
+        """
+        self.user_coord_enabled_var.set(enabled)
+        # 触发切换事件以更新UI
+        self._on_user_coord_toggle()
+    
+    def set_user_position(self, x: float, y: float):
+        """
+        设置用户位置（用于项目加载）
+        
+        Args:
+            x: 用户X坐标
+            y: 用户Y坐标
+        """
+        self.user_x_var.set(f"{x:.3f}")
+        self.user_y_var.set(f"{y:.3f}")
+        # 更新状态显示
+        self.update_user_position_status((x, y)) 

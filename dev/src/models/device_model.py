@@ -11,11 +11,9 @@ from typing import Dict, Any, Optional
 # 导入验证工具
 try:
     from utils.validation import Validator
-    from utils.layout_manager import DeviceInfoPosition
 except ImportError:
-    print("⚠️ 验证工具或布局管理器不可用")
+    print("⚠️ 验证工具不可用")
     Validator = None
-    DeviceInfoPosition = None
 
 
 class Device:
@@ -55,9 +53,9 @@ class Device:
         self.y = float(y)
         self.created_time = datetime.now()
         
-        # 信息框位置状态管理 ✨ 智能避让功能
-        self.current_info_position: Optional[DeviceInfoPosition] = None  # 当前信息框位置
-        self.default_info_position: Optional[DeviceInfoPosition] = None  # 默认信息框位置
+        # 信息框位置状态管理 ✨ 智能避让功能（简化版）
+        self.current_info_position: Optional[str] = None  # 当前信息框位置
+        self.default_info_position: Optional[str] = None  # 默认信息框位置
         self.is_info_position_forced: bool = False  # 是否为强制避让位置
         
         # 验证数据有效性
@@ -125,13 +123,12 @@ class Device:
             'created_time': self.created_time.isoformat()
         }
         
-        # 添加信息框位置状态（如果可用）
-        if DeviceInfoPosition is not None:
-            result.update({
-                'current_info_position': self.current_info_position.value if self.current_info_position else None,
-                'default_info_position': self.default_info_position.value if self.default_info_position else None,
-                'is_info_position_forced': self.is_info_position_forced
-            })
+        # 添加信息框位置状态
+        result.update({
+            'current_info_position': self.current_info_position,
+            'default_info_position': self.default_info_position,
+            'is_info_position_forced': self.is_info_position_forced
+        })
         
         return result
     
@@ -161,17 +158,16 @@ class Device:
                 # 如果时间格式不正确，使用当前时间
                 pass
         
-        # 恢复信息框位置状态（如果可用）
-        if DeviceInfoPosition is not None:
-            try:
-                if data.get('current_info_position'):
-                    device.current_info_position = DeviceInfoPosition(data['current_info_position'])
-                if data.get('default_info_position'):
-                    device.default_info_position = DeviceInfoPosition(data['default_info_position'])
-                device.is_info_position_forced = data.get('is_info_position_forced', False)
-            except (ValueError, KeyError):
-                # 如果位置数据不正确，保持默认值
-                pass
+        # 恢复信息框位置状态
+        try:
+            if data.get('current_info_position'):
+                device.current_info_position = data['current_info_position']
+            if data.get('default_info_position'):
+                device.default_info_position = data['default_info_position']
+            device.is_info_position_forced = data.get('is_info_position_forced', False)
+        except (ValueError, KeyError):
+            # 如果位置数据不正确，保持默认值
+            pass
                 
         return device
     
@@ -211,17 +207,14 @@ class Device:
             return False
         return self.id == other.id
     
-    def set_info_position(self, position: DeviceInfoPosition, is_forced: bool = False):
+    def set_info_position(self, position: str, is_forced: bool = False):
         """
-        设置设备信息框位置
+        设置设备信息框位置（简化版）
         
         Args:
-            position: 信息框位置
+            position: 信息框位置（字符串：如"top_left", "top_right"等）
             is_forced: 是否为强制避让位置
         """
-        if DeviceInfoPosition is None:
-            return
-            
         self.current_info_position = position
         if not is_forced and self.default_info_position is None:
             # 如果是第一次设置且不是强制位置，则记录为默认位置
@@ -242,7 +235,7 @@ class Device:
             包含位置状态的字典
         """
         return {
-            'current_position': self.current_info_position.value if self.current_info_position else None,
-            'default_position': self.default_info_position.value if self.default_info_position else None,
+            'current_position': self.current_info_position,
+            'default_position': self.default_info_position,
             'is_forced': self.is_info_position_forced
         }

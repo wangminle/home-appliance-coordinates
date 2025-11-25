@@ -3,19 +3,23 @@
 Matplotlib坐标展示控制器
 
 基于Matplotlib实现的控制器，替换原有的MainController
+支持项目文件管理和数据持久化功能
 """
 
 import tkinter as tk
-from tkinter import messagebox, filedialog
-from typing import List
+from tkinter import messagebox, filedialog, Menu
+from typing import List, Optional, Dict, Any
 import os
 from datetime import datetime
+from pathlib import Path
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
 from views.matplotlib_view import MatplotlibView
 from views.input_panel import InputPanel
 from models.device_manager import DeviceManager
+from models.project_manager import ProjectManager
+from models.config_manager import ConfigManager
 
 
 class MatplotlibController:
@@ -36,12 +40,29 @@ class MatplotlibController:
         
         # 创建数据管理器
         self.device_manager = DeviceManager()
+        self.project_manager = ProjectManager()
+        self.config_manager = ConfigManager()
+        
+        # 自动保存定时器ID
+        self.autosave_timer_id: Optional[str] = None
         
         # 创建主界面
         self._create_main_interface()
         
+        # 创建文件菜单
+        self._create_menu_bar()
+        
         # 绑定事件
         self._bind_view_events()
+        
+        # 绑定窗口关闭事件
+        self.root.protocol("WM_DELETE_WINDOW", self._on_window_closing)
+        
+        # 启动自动保存
+        self._start_autosave()
+        
+        # 检查是否有草稿文件需要恢复
+        self._check_autosave_recovery()
         
         print("✅ MatplotlibController初始化完成")
     
@@ -73,6 +94,43 @@ class MatplotlibController:
         self.input_panel = InputPanel(right_frame, self)
         
         print("✅ 主界面创建完成")
+    
+    def _create_menu_bar(self):
+        """
+        创建菜单栏
+        """
+        menubar = Menu(self.root)
+        self.root.config(menu=menubar)
+        
+        # 文件菜单
+        file_menu = Menu(menubar, tearoff=0)
+        menubar.add_cascade(label="文件(F)", menu=file_menu)
+        
+        file_menu.add_command(label="新建项目", accelerator="Ctrl+N", command=self.new_project)
+        file_menu.add_command(label="打开项目...", accelerator="Ctrl+O", command=self.open_project)
+        file_menu.add_separator()
+        file_menu.add_command(label="保存项目", accelerator="Ctrl+S", command=self.save_project)
+        file_menu.add_command(label="另存为...", accelerator="Ctrl+Shift+S", command=self.save_project_as)
+        file_menu.add_separator()
+        file_menu.add_command(label="导入设备(CSV)...", command=self.import_devices_csv)
+        file_menu.add_command(label="导出设备(CSV)...", command=self.export_devices_csv)
+        file_menu.add_separator()
+        
+        # 最近文件子菜单
+        self.recent_menu = Menu(file_menu, tearoff=0)
+        file_menu.add_cascade(label="最近打开", menu=self.recent_menu)
+        self._update_recent_files_menu()
+        
+        file_menu.add_separator()
+        file_menu.add_command(label="退出", accelerator="Alt+F4", command=self._on_window_closing)
+        
+        # 绑定快捷键
+        self.root.bind('<Control-n>', lambda e: self.new_project())
+        self.root.bind('<Control-o>', lambda e: self.open_project())
+        self.root.bind('<Control-s>', lambda e: self.save_project())
+        self.root.bind('<Control-Shift-S>', lambda e: self.save_project_as())
+        
+        print("✅ 菜单栏创建完成")
     
     def _bind_view_events(self):
         """
@@ -151,6 +209,9 @@ class MatplotlibController:
         self.set_coordinate_range(x_range, y_range)
         # 更新范围状态（确保UI同步）
         self.input_panel.update_range_status(x_range, y_range)
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
     
     def _on_device_add(self, device: Device):
         """
@@ -201,6 +262,10 @@ class MatplotlibController:
             self.canvas_view.clear_user_position()
             # 更新用户位置状态为未设置
             self.input_panel.update_user_position_status(None)
+        
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
     
     def _on_user_position_set(self, x: float, y: float):
         """
@@ -217,6 +282,10 @@ class MatplotlibController:
         
         # 更新用户位置状态指示器 ✨ 第五步新增功能
         self.input_panel.update_user_position_status((x, y))
+        
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
 
     # === 设备管理方法 ===
     
@@ -234,7 +303,18 @@ class MatplotlibController:
         """
         try:
             device = Device(name, x, y)
-            self.device_manager.add_device(device)
+            # 检查 DeviceManager 的返回值
+            success, message = self.device_manager.add_device(device)
+            
+            if not success:
+                # 底层验证失败，显示错误消息
+                messagebox.showerror("添加设备失败", message)
+                print(f"❌ 设备添加失败: {message}")
+                return False
+            
+            # 只有成功时才标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
             
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
@@ -262,7 +342,18 @@ class MatplotlibController:
         """
         try:
             new_device = Device(name, x, y)
-            self.device_manager.update_device(device_id, new_device)
+            # 检查 DeviceManager 的返回值
+            success, message = self.device_manager.update_device(device_id, new_device)
+            
+            if not success:
+                # 底层验证失败，显示错误消息
+                messagebox.showerror("更新设备失败", message)
+                print(f"❌ 设备更新失败: {message}")
+                return False
+            
+            # 只有成功时才标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
             
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
@@ -287,18 +378,30 @@ class MatplotlibController:
         """
         try:
             device = self.device_manager.get_device_by_id(device_id)
-            if device:
-                device_name = device.name
-                self.device_manager.delete_device(device_id)
-                
-                # 更新视图
-                self.canvas_view.update_devices(self.device_manager.get_devices())
-                
-                print(f"✅ 设备删除成功: {device_name}")
-                return True
-            else:
+            if not device:
+                messagebox.showerror("删除设备失败", "设备不存在")
                 print(f"❌ 设备不存在: {device_id}")
                 return False
+            
+            device_name = device.name
+            # 检查 DeviceManager 的返回值
+            success, message = self.device_manager.delete_device(device_id)
+            
+            if not success:
+                # 底层操作失败，显示错误消息
+                messagebox.showerror("删除设备失败", message)
+                print(f"❌ 设备删除失败: {message}")
+                return False
+            
+            # 只有成功时才标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
+            
+            # 更新视图
+            self.canvas_view.update_devices(self.device_manager.get_devices())
+            
+            print(f"✅ 设备删除成功: {device_name}")
+            return True
             
         except Exception as e:
             messagebox.showerror("删除设备失败", f"无法删除设备: {str(e)}")
@@ -464,4 +567,543 @@ class MatplotlibController:
         Returns:
             MatplotlibView对象
         """
-        return self.canvas_view 
+        return self.canvas_view
+    
+    # ==================== 项目文件管理功能 ====================
+    
+    def new_project(self):
+        """新建项目"""
+        try:
+            # 检查当前项目是否需要保存
+            if self.project_manager.is_modified:
+                result = messagebox.askyesnocancel(
+                    "保存项目",
+                    "当前项目未保存，是否保存？",
+                    icon='question'
+                )
+                if result is None:  # 取消
+                    return
+                elif result:  # 保存
+                    if not self.save_project():
+                        return
+            
+            # 清除所有数据
+            self.device_manager.clear_all_devices()
+            self.canvas_view.clear_all()
+            self.canvas_view.set_coordinate_range(10.0, 10.0)
+            self.input_panel.reset_inputs()
+            
+            # 重置项目状态
+            self.project_manager.current_project_path = None
+            self.project_manager.current_project_name = "未命名项目"
+            self.project_manager.is_modified = False
+            
+            # 更新窗口标题
+            self._update_window_title()
+            
+            print("✅ 新建项目完成")
+            
+        except Exception as e:
+            messagebox.showerror("新建项目失败", f"新建项目时发生错误: {str(e)}")
+            print(f"❌ 新建项目失败: {e}")
+    
+    def open_project(self):
+        """打开项目"""
+        try:
+            # 检查当前项目是否需要保存
+            if self.project_manager.is_modified:
+                result = messagebox.askyesnocancel(
+                    "保存项目",
+                    "当前项目未保存，是否保存？",
+                    icon='question'
+                )
+                if result is None:  # 取消
+                    return
+                elif result:  # 保存
+                    if not self.save_project():
+                        return
+            
+            # 获取默认目录
+            default_dir = self.project_manager.get_default_project_dir()
+            
+            # 选择项目文件
+            file_path = filedialog.askopenfilename(
+                title="打开项目",
+                initialdir=str(default_dir),
+                filetypes=[
+                    ("项目文件", "*.apc"),
+                    ("所有文件", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                print("⚠️ 用户取消打开")
+                return
+            
+            # 加载项目
+            self._load_project_file(file_path)
+            
+        except Exception as e:
+            messagebox.showerror("打开项目失败", f"打开项目时发生错误: {str(e)}")
+            print(f"❌ 打开项目失败: {e}")
+    
+    def save_project(self) -> bool:
+        """
+        保存项目
+        
+        Returns:
+            是否保存成功
+        """
+        try:
+            # 如果没有项目路径，执行另存为
+            if self.project_manager.current_project_path is None:
+                return self.save_project_as()
+            
+            # 保存到当前路径
+            return self._save_to_file(str(self.project_manager.current_project_path))
+            
+        except Exception as e:
+            messagebox.showerror("保存项目失败", f"保存项目时发生错误: {str(e)}")
+            print(f"❌ 保存项目失败: {e}")
+            return False
+    
+    def save_project_as(self) -> bool:
+        """
+        项目另存为
+        
+        Returns:
+            是否保存成功
+        """
+        try:
+            # 获取默认目录和文件名
+            default_dir = self.project_manager.get_default_project_dir()
+            default_name = f"{self.project_manager.current_project_name}.apc"
+            
+            # 选择保存路径
+            file_path = filedialog.asksaveasfilename(
+                title="另存为",
+                initialdir=str(default_dir),
+                initialfile=default_name,
+                defaultextension=".apc",
+                filetypes=[
+                    ("项目文件", "*.apc"),
+                    ("所有文件", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                print("⚠️ 用户取消保存")
+                return False
+            
+            # 保存到指定路径
+            return self._save_to_file(file_path)
+            
+        except Exception as e:
+            messagebox.showerror("另存为失败", f"另存为时发生错误: {str(e)}")
+            print(f"❌ 另存为失败: {e}")
+            return False
+    
+    def import_devices_csv(self):
+        """从CSV导入设备列表"""
+        try:
+            # 选择CSV文件
+            file_path = filedialog.askopenfilename(
+                title="导入设备列表",
+                filetypes=[
+                    ("CSV files", "*.csv"),
+                    ("所有文件", "*.*")
+                ]
+            )
+            
+            if not file_path:
+                print("⚠️ 用户取消导入")
+                return
+            
+            # 导入设备
+            success, message, devices = self.project_manager.import_devices_from_csv(file_path)
+            
+            if not success:
+                messagebox.showerror("导入失败", message)
+                return
+            
+            # 询问是否覆盖现有设备
+            if self.device_manager.get_device_count() > 0:
+                result = messagebox.askyesno(
+                    "导入设备",
+                    f"将导入 {len(devices)} 个设备。\n是否清空现有设备？\n\n点击'是'清空现有设备，'否'追加到现有设备。",
+                    icon='question'
+                )
+                if result:
+                    self.device_manager.clear_all_devices()
+            
+            # 添加设备
+            added_count = 0
+            skipped_count = 0
+            for device in devices:
+                success, msg = self.device_manager.add_device(device)
+                if success:
+                    added_count += 1
+                else:
+                    skipped_count += 1
+                    print(f"⚠️ 跳过设备 {device.name}: {msg}")
+            
+            # 更新视图
+            self.canvas_view.update_devices(self.device_manager.get_devices())
+            self.input_panel.update_devices(self.device_manager.get_devices())
+            
+            # 标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
+            
+            # 显示结果
+            result_message = f"成功导入 {added_count} 个设备"
+            if skipped_count > 0:
+                result_message += f"\n跳过 {skipped_count} 个设备（名称重复或超出数量限制）"
+            
+            messagebox.showinfo("导入完成", result_message)
+            print(f"✅ {result_message}")
+            
+        except Exception as e:
+            messagebox.showerror("导入错误", f"导入过程中发生错误: {str(e)}")
+            print(f"❌ CSV导入错误: {e}")
+    
+    def export_devices_csv(self):
+        """导出设备列表到CSV"""
+        try:
+            devices = self.device_manager.get_devices()
+            
+            if not devices:
+                messagebox.showwarning("无法导出", "当前没有设备可导出")
+                return
+            
+            # 生成默认文件名
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            default_filename = f"设备列表_{timestamp}.csv"
+            
+            # 选择保存路径
+            file_path = filedialog.asksaveasfilename(
+                title="导出设备列表",
+                defaultextension=".csv",
+                filetypes=[
+                    ("CSV files", "*.csv"),
+                    ("所有文件", "*.*")
+                ],
+                initialfile=default_filename
+            )
+            
+            if not file_path:
+                print("⚠️ 用户取消导出")
+                return
+            
+            # 执行导出
+            success, message = self.project_manager.export_devices_to_csv(file_path, devices)
+            
+            if success:
+                messagebox.showinfo("导出成功", message)
+            else:
+                messagebox.showerror("导出失败", message)
+                
+        except Exception as e:
+            messagebox.showerror("导出错误", f"导出过程中发生错误: {str(e)}")
+            print(f"❌ CSV导出错误: {e}")
+    
+    def _save_to_file(self, file_path: str) -> bool:
+        """
+        保存项目到文件
+        
+        Args:
+            file_path: 文件路径
+            
+        Returns:
+            是否保存成功
+        """
+        try:
+            # 收集数据
+            devices = self.device_manager.get_devices()
+            x_range, y_range = self.canvas_view.current_range
+            coordinate_settings = {'x_range': x_range, 'y_range': y_range}
+            
+            # 用户坐标系设置
+            user_coord_settings = {
+                'enabled': self.canvas_view.user_coord_enabled,
+                'user_x': self.canvas_view.user_position[0] if self.canvas_view.user_position else None,
+                'user_y': self.canvas_view.user_position[1] if self.canvas_view.user_position else None
+            }
+            
+            # 保存项目
+            success, message = self.project_manager.save_project(
+                file_path,
+                devices,
+                coordinate_settings,
+                user_coord_settings
+            )
+            
+            if success:
+                # 添加到最近文件
+                self.config_manager.add_recent_file(file_path)
+                self._update_recent_files_menu()
+                
+                # 更新窗口标题
+                self._update_window_title()
+                
+                messagebox.showinfo("保存成功", message)
+                return True
+            else:
+                messagebox.showerror("保存失败", message)
+                return False
+                
+        except Exception as e:
+            messagebox.showerror("保存错误", f"保存过程中发生错误: {str(e)}")
+            print(f"❌ 保存错误: {e}")
+            return False
+    
+    def _load_project_file(self, file_path: str):
+        """
+        从文件加载项目
+        
+        Args:
+            file_path: 项目文件路径
+        """
+        try:
+            # 加载项目
+            success, message, project_data = self.project_manager.load_project(file_path)
+            
+            if not success:
+                messagebox.showerror("加载失败", message)
+                return
+            
+            # 清空当前数据
+            self.device_manager.clear_all_devices()
+            
+            # 恢复坐标范围
+            coord_settings = project_data.get('coordinate_settings', {})
+            x_range = coord_settings.get('x_range', 10.0)
+            y_range = coord_settings.get('y_range', 10.0)
+            self.canvas_view.set_coordinate_range(x_range, y_range)
+            
+            # 恢复设备列表
+            devices = project_data.get('devices_parsed', [])
+            for device in devices:
+                self.device_manager.add_device(device)
+            
+            # 恢复用户坐标系
+            user_coord = project_data.get('user_coordinate_system', {})
+            if user_coord.get('enabled'):
+                # 启用用户坐标系
+                user_x = user_coord.get('user_x')
+                user_y = user_coord.get('user_y')
+                if user_x is not None and user_y is not None:
+                    self.canvas_view.set_user_coordinate_mode(True)
+                    self.canvas_view.set_user_position(user_x, user_y)
+                    self.input_panel.set_user_coord_enabled(True)
+                    self.input_panel.set_user_position(user_x, user_y)
+            else:
+                # 禁用用户坐标系，清理旧状态
+                # 先直接设置状态，确保即使视图层出错也能清除
+                self.canvas_view.user_coord_enabled = False
+                self.canvas_view.user_position = None
+                # 然后尝试更新视图
+                try:
+                    self.canvas_view.set_user_coordinate_mode(False)
+                    self.canvas_view.clear_user_position()
+                except Exception as e:
+                    print(f"⚠️ 清除用户坐标系视图时出错（已忽略）: {e}")
+                # 更新输入面板
+                self.input_panel.set_user_coord_enabled(False)
+                self.input_panel.update_user_position_status(None)
+                self.input_panel.update_coordinate_mode_status(False)
+            
+            # 更新视图
+            self.canvas_view.update_devices(self.device_manager.get_devices())
+            self.input_panel.update_devices(self.device_manager.get_devices())
+            self.input_panel.set_coordinate_range(x_range, y_range)
+            
+            # 添加到最近文件
+            self.config_manager.add_recent_file(file_path)
+            self._update_recent_files_menu()
+            
+            # 更新窗口标题
+            self._update_window_title()
+            
+            messagebox.showinfo("加载成功", f"项目加载成功：{Path(file_path).name}")
+            print(f"✅ 项目加载成功: {file_path}")
+            
+        except Exception as e:
+            messagebox.showerror("加载错误", f"加载项目时发生错误: {str(e)}")
+            print(f"❌ 加载错误: {e}")
+    
+    def _update_recent_files_menu(self):
+        """更新最近文件菜单"""
+        try:
+            # 清空菜单
+            self.recent_menu.delete(0, 'end')
+            
+            # 获取最近文件列表
+            recent_files = self.config_manager.get_recent_files()
+            
+            if not recent_files:
+                self.recent_menu.add_command(label="(无最近文件)", state='disabled')
+                return
+            
+            # 添加最近文件
+            for i, file_path in enumerate(recent_files[:10]):
+                file_name = Path(file_path).name
+                self.recent_menu.add_command(
+                    label=f"{i+1}. {file_name}",
+                    command=lambda f=file_path: self._open_recent_file(f)
+                )
+            
+            # 添加分隔线和清除历史
+            self.recent_menu.add_separator()
+            self.recent_menu.add_command(label="清除历史", command=self._clear_recent_files)
+            
+        except Exception as e:
+            print(f"⚠️ 更新最近文件菜单失败: {e}")
+    
+    def _open_recent_file(self, file_path: str):
+        """打开最近文件"""
+        try:
+            # 检查文件是否存在
+            if not Path(file_path).exists():
+                messagebox.showerror("文件不存在", f"文件不存在：\n{file_path}")
+                # 从最近文件列表中移除
+                self.config_manager.remove_recent_file(file_path)
+                self._update_recent_files_menu()
+                return
+            
+            # 检查当前项目是否需要保存
+            if self.project_manager.is_modified:
+                result = messagebox.askyesnocancel(
+                    "保存项目",
+                    "当前项目未保存，是否保存？",
+                    icon='question'
+                )
+                if result is None:  # 取消
+                    return
+                elif result:  # 保存
+                    if not self.save_project():
+                        return
+            
+            # 加载项目
+            self._load_project_file(file_path)
+            
+        except Exception as e:
+            messagebox.showerror("打开失败", f"打开最近文件时发生错误: {str(e)}")
+            print(f"❌ 打开最近文件失败: {e}")
+    
+    def _clear_recent_files(self):
+        """清除最近文件历史"""
+        self.config_manager.clear_recent_files()
+        self._update_recent_files_menu()
+        print("✅ 最近文件历史已清除")
+    
+    def _update_window_title(self):
+        """更新窗口标题"""
+        project_title = self.project_manager.get_project_title()
+        self.root.title(f"家居设备坐标距离角度绘制工具 - [{project_title}] - Matplotlib版")
+    
+    # ==================== 自动保存功能 ====================
+    
+    def _start_autosave(self):
+        """启动自动保存定时器"""
+        if not self.config_manager.is_autosave_enabled():
+            print("⚠️ 自动保存已禁用")
+            return
+        
+        interval = self.config_manager.get_autosave_interval()
+        self.autosave_timer_id = self.root.after(interval * 1000, self._autosave)
+        print(f"✅ 自动保存定时器已启动，间隔: {interval}秒")
+    
+    def _autosave(self):
+        """执行自动保存"""
+        try:
+            # 检查是否有设备数据
+            if self.device_manager.get_device_count() == 0:
+                # 没有数据，继续下一次定时
+                self._start_autosave()
+                return
+            
+            # 获取自动保存文件路径
+            autosave_path = self.config_manager.get_autosave_file_path()
+            
+            # 收集数据
+            devices = self.device_manager.get_devices()
+            x_range, y_range = self.canvas_view.current_range
+            coordinate_settings = {'x_range': x_range, 'y_range': y_range}
+            
+            user_coord_settings = {
+                'enabled': self.canvas_view.user_coord_enabled,
+                'user_x': self.canvas_view.user_position[0] if self.canvas_view.user_position else None,
+                'user_y': self.canvas_view.user_position[1] if self.canvas_view.user_position else None
+            }
+            
+            # 保存草稿（使用 save_draft 方法，不会更新项目状态）
+            success, message = self.project_manager.save_draft(
+                str(autosave_path),
+                devices,
+                coordinate_settings,
+                user_coord_settings,
+                {'name': '自动保存草稿', 'description': '自动保存的草稿文件'}
+            )
+            
+            if success:
+                print(f"💾 自动保存成功: {autosave_path.name}")
+                # 清理旧的自动保存文件
+                self.config_manager.clean_old_autosave_files(keep_count=5)
+            
+        except Exception as e:
+            print(f"⚠️ 自动保存失败: {e}")
+        finally:
+            # 继续下一次定时
+            self._start_autosave()
+    
+    def _check_autosave_recovery(self):
+        """检查是否有自动保存文件需要恢复"""
+        try:
+            latest_autosave = self.config_manager.get_latest_autosave_file()
+            
+            if latest_autosave and latest_autosave.exists():
+                # 获取文件修改时间
+                mtime = datetime.fromtimestamp(latest_autosave.stat().st_mtime)
+                time_str = mtime.strftime("%Y-%m-%d %H:%M:%S")
+                
+                result = messagebox.askyesno(
+                    "恢复草稿",
+                    f"发现自动保存的草稿文件：\n时间: {time_str}\n\n是否恢复？",
+                    icon='question'
+                )
+                
+                if result:
+                    self._load_project_file(str(latest_autosave))
+                    print(f"✅ 从草稿恢复成功")
+                    
+        except Exception as e:
+            print(f"⚠️ 检查自动保存恢复失败: {e}")
+    
+    def _on_window_closing(self):
+        """窗口关闭事件处理"""
+        try:
+            # 检查是否需要保存
+            if self.project_manager.is_modified:
+                result = messagebox.askyesnocancel(
+                    "保存项目",
+                    "项目未保存，是否保存？",
+                    icon='question'
+                )
+                if result is None:  # 取消关闭
+                    return
+                elif result:  # 保存
+                    if not self.save_project():
+                        return
+            
+            # 停止自动保存定时器
+            if self.autosave_timer_id:
+                self.root.after_cancel(self.autosave_timer_id)
+            
+            # 关闭窗口
+            self.root.destroy()
+            print("👋 应用程序已退出")
+            
+        except Exception as e:
+            print(f"❌ 关闭窗口时发生错误: {e}")
+            self.root.destroy() 

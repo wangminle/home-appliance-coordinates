@@ -233,54 +233,61 @@ class MatplotlibView:
             print(f"⚠️ 布局处理失败，回退到默认位置: {e}")
     
     def _apply_native_layout(self):
-        """使用高性能原生布局算法"""
+        """使用高性能原生布局算法（力导向版）"""
         if not self.fast_layout_manager:
             return
         
-        # 清空布局管理器
-        self.fast_layout_manager.clear_elements()
+        # 1. 清除动态元素（保留静态障碍物）
+        self.fast_layout_manager.clear_dynamic_elements()
         
-        # 🎯 修复：根据元素类型使用正确的锚点位置
+        # 2. 将所有文本对象添加到布局管理器
+        text_element_map = {} # 映射 element_id -> text_obj
+        
         for i, text_obj in enumerate(self.text_objects):
             element_type = self._get_element_type_from_text(text_obj)
             element_id = f"{element_type.value}_{id(text_obj)}"
+            text_element_map[element_id] = text_obj
             
-            # 🎯 根据元素类型确定正确的锚点
+            # 确定锚点
             if element_type == ElementType.DEVICE_INFO and i < len(self.devices):
-                # 设备标签：使用设备的实际坐标作为锚点
                 anchor_x = self.devices[i].x
                 anchor_y = self.devices[i].y
             elif element_type == ElementType.MEASUREMENT_INFO and self.measurement_point:
-                # 测量信息：使用测量点坐标作为锚点
                 anchor_x = self.measurement_point.x
                 anchor_y = self.measurement_point.y
             elif element_type == ElementType.USER_POSITION and self.user_position:
-                # 用户位置：使用用户位置坐标作为锚点
                 anchor_x, anchor_y = self.user_position
             else:
-                # 其他情况：使用文本当前位置作为锚点（保持兼容性）
                 anchor_x = text_obj.get_position()[0]
                 anchor_y = text_obj.get_position()[1]
             
-            # 计算最佳位置
-            new_x, new_y = self.fast_layout_manager.calculate_optimal_position(
-                anchor_x, anchor_y, element_type, element_id
-            )
+            # 获取当前位置作为初始位置
+            current_x, current_y = text_obj.get_position()
             
-            # 更新文本位置
-            text_obj.set_position((new_x, new_y))
-            
-            # 添加到布局管理器
+            # 获取尺寸
             box_width, box_height = self.fast_layout_manager.info_box_sizes.get(
                 element_type, (1.0, 0.5)
             )
+            
+            # 创建边界框
             bbox = BoundingBox(
-                new_x - box_width/2, new_y - box_height/2,
-                new_x + box_width/2, new_y + box_height/2
+                current_x - box_width/2, current_y - box_height/2,
+                current_x + box_width/2, current_y + box_height/2
             )
+            
+            # 创建元素
             element = LayoutElement(element_type, bbox, (anchor_x, anchor_y), 
-                                  element_id=element_id)
+                                  element_id=element_id, movable=True, static=False)
             self.fast_layout_manager.add_element(element)
+            
+        # 3. 计算布局
+        self.fast_layout_manager.compute_layout(iterations=50)
+        
+        # 4. 更新文本位置
+        for element in self.fast_layout_manager.elements:
+            if not element.static and element.element_id in text_element_map:
+                text_obj = text_element_map[element.element_id]
+                text_obj.set_position((element.current_x, element.current_y))
     
     def _apply_adjusttext_layout(self):
         """使用adjustText进行复杂布局（仅在必要时）"""
@@ -531,8 +538,10 @@ class MatplotlibView:
             return  # 没有需要清除的对象，避免无用操作
         
         for artist in self.crosshair_artists:
-            if artist in self.axes.lines:
+            try:
                 artist.remove()
+            except (ValueError, AttributeError):
+                pass  # 如果对象已被移除或无效，忽略错误
         self.crosshair_artists.clear()
         # 注意：不在这里调用draw_idle()，由调用者统一控制重绘时机
     
@@ -756,7 +765,7 @@ class MatplotlibView:
             # 创建扇形布局元素
             sector_element = LayoutElement(
                 ElementType.SECTOR, sector_bbox, (center_x, center_y),
-                priority=2, movable=False, element_id="sector"
+                priority=2, movable=False, element_id="sector", static=True
             )
             self.fast_layout_manager.add_element(sector_element)
         
@@ -775,8 +784,8 @@ class MatplotlibView:
                 # 同时从文本对象列表中移除
                 if artist in self.text_objects:
                     self.text_objects.remove(artist)
-            except ValueError:
-                pass  # 可能已经被移除
+            except (ValueError, AttributeError):
+                pass  # 可能已经被移除或无效
         self.device_artists.clear()
         
         # 清除布局管理器中的设备元素（保留备用）
@@ -793,8 +802,8 @@ class MatplotlibView:
                 # 同时从文本对象列表中移除
                 if artist in self.text_objects:
                     self.text_objects.remove(artist)
-            except ValueError:
-                pass
+            except (ValueError, AttributeError):
+                pass  # 可能已经被移除或无效
         self.measurement_artists.clear()
         
         # 清除布局管理器中的测量元素（保留备用）
@@ -808,8 +817,8 @@ class MatplotlibView:
         for artist in self.sector_artists:
             try:
                 artist.remove()
-            except ValueError:
-                pass
+            except (ValueError, AttributeError):
+                pass  # 可能已经被移除或无效
         self.sector_artists.clear()
         
         # 清除布局管理器中的扇形元素
@@ -828,6 +837,17 @@ class MatplotlibView:
             # 清除所有绘制对象
             self.axes.clear()
             
+            # axes.clear() 已经移除了所有 artist，直接清空引用列表即可
+            # 不要调用各个 _clear_xxx 方法，因为它们会尝试 remove 已经被清除的对象
+            self.device_artists.clear()
+            self.measurement_artists.clear()
+            self.sector_artists.clear()
+            self.crosshair_artists.clear()
+            self.user_position_artists.clear()
+            self.coordinate_info_artists.clear()
+            self.text_objects.clear()
+            self.obstacle_objects.clear()
+            
             # 重新初始化布局管理器
             self._init_fast_layout_manager()
             
@@ -836,8 +856,17 @@ class MatplotlibView:
             
             # 重新绘制所有内容
             self._draw_devices()
-            self._draw_measurement()
-            self._draw_sector()
+            if self.measurement_point:
+                self._draw_measurement()
+            if self.sector_point:
+                self._draw_sector()
+            
+            # 重新绘制用户坐标系（如果启用）
+            if self.user_coord_enabled:
+                self._draw_user_coordinate_overlay()
+                if self.user_position:
+                    self._draw_user_position_marker()
+                    self._draw_user_coordinate_axes()
             
             print(f"✅ 坐标范围已更新: ±{x_range} x ±{y_range}")
             
@@ -1189,8 +1218,8 @@ class MatplotlibView:
                 # 同时从文本对象列表中移除
                 if artist in self.text_objects:
                     self.text_objects.remove(artist)
-            except ValueError:
-                pass  # 如果对象已被移除，忽略错误
+            except (ValueError, AttributeError):
+                pass  # 如果对象已被移除或无效，忽略错误
         self.user_position_artists.clear()
         
         # 清除布局管理器中的用户位置元素（保留备用）
@@ -1204,17 +1233,18 @@ class MatplotlibView:
         # 清除用户位置标记、轴线，但保留网格
         artists_to_remove = []
         for artist in self.user_position_artists:
-            # 检查是否是scatter、text或者轴线对象（不是网格线）
-            is_marker_or_text = hasattr(artist, 'get_offsets') or hasattr(artist, 'get_text')
-            is_axis_line = (hasattr(artist, 'get_linestyle') and 
-                           artist.get_linestyle() == '--')  # 虚线轴线
-            
-            if is_marker_or_text or is_axis_line:
-                try:
+            try:
+                # 检查是否是scatter、text或者轴线对象（不是网格线）
+                is_marker_or_text = hasattr(artist, 'get_offsets') or hasattr(artist, 'get_text')
+                is_axis_line = (hasattr(artist, 'get_linestyle') and 
+                               artist.get_linestyle() == '--')  # 虚线轴线
+                
+                if is_marker_or_text or is_axis_line:
                     artist.remove()
                     artists_to_remove.append(artist)
-                except ValueError:
-                    pass
+            except (ValueError, AttributeError):
+                # 如果对象已被移除或属性无效，将其标记为需要从列表移除
+                artists_to_remove.append(artist)
         
         # 从列表中移除已删除的对象
         for artist in artists_to_remove:
@@ -1350,7 +1380,10 @@ class MatplotlibView:
         清除坐标信息显示
         """
         for artist in self.coordinate_info_artists:
-            if artist.axes == self.axes:
-                artist.remove()
+            try:
+                if artist.axes == self.axes:
+                    artist.remove()
+            except (ValueError, AttributeError):
+                pass  # 如果对象已被移除或无效，忽略错误
         self.coordinate_info_artists.clear()
         self.canvas.draw_idle() 
