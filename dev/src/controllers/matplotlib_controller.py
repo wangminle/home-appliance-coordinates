@@ -217,7 +217,8 @@ class MatplotlibController:
         """
         处理设备添加事件
         """
-        success = self.add_device(device.name, device.x, device.y)
+        # 保留从输入面板传入的颜色信息
+        success = self.add_device(device.name, device.x, device.y, device.color)
         if success:
             # 更新输入面板显示
             self.input_panel.update_devices(self.device_manager.get_devices())
@@ -226,7 +227,14 @@ class MatplotlibController:
         """
         处理设备更新事件
         """
-        success = self.update_device(old_device.id, new_device.name, new_device.x, new_device.y)
+        # 同步更新颜色信息
+        success = self.update_device(
+            old_device.id,
+            new_device.name,
+            new_device.x,
+            new_device.y,
+            new_device.color
+        )
         if success:
             # 更新输入面板显示
             self.input_panel.update_devices(self.device_manager.get_devices())
@@ -289,7 +297,7 @@ class MatplotlibController:
 
     # === 设备管理方法 ===
     
-    def add_device(self, name: str, x: float, y: float) -> bool:
+    def add_device(self, name: str, x: float, y: float, color: Optional[str] = None) -> bool:
         """
         添加设备
         
@@ -297,12 +305,13 @@ class MatplotlibController:
             name: 设备名称
             x: X坐标
             y: Y坐标
+            color: 设备颜色（可选）
             
         Returns:
             True如果添加成功，否则False
         """
         try:
-            device = Device(name, x, y)
+            device = Device(name, x, y, color=color)
             # 检查 DeviceManager 的返回值
             success, message = self.device_manager.add_device(device)
             
@@ -327,7 +336,7 @@ class MatplotlibController:
             print(f"❌ 设备添加失败: {e}")
             return False
     
-    def update_device(self, device_id: str, name: str, x: float, y: float) -> bool:
+    def update_device(self, device_id: str, name: str, x: float, y: float, color: Optional[str] = None) -> bool:
         """
         更新设备信息
         
@@ -336,12 +345,13 @@ class MatplotlibController:
             name: 新的设备名称
             x: 新的X坐标
             y: 新的Y坐标
+            color: 新的设备颜色（可选）
             
         Returns:
             True如果更新成功，否则False
         """
         try:
-            new_device = Device(name, x, y)
+            new_device = Device(name, x, y, color=color)
             # 检查 DeviceManager 的返回值
             success, message = self.device_manager.update_device(device_id, new_device)
             

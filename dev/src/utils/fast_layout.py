@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
-高性能原生布局管理器
+高性能原生布局管理器 V2.0
 
-简洁高效的标注避让方案，专门针对家居设备坐标绘制场景优化
-核心算法：智能离散槽位搜索 + 锚点距离惩罚
+增强版标注避让方案，专门针对家居设备坐标绘制场景优化
+核心改进：
+1. 扇形斥力场 - 标签进入扇形区域会被强力弹开
+2. 模拟退火扰动 - 避免陷入局部最优解
+3. 分层计算 - 按优先级依次处理不同类型的标签
 """
 
 from enum import Enum
 from typing import List, Tuple, Optional, Dict
 import math
 import time
+import random
 
 class ElementType(Enum):
     """元素类型枚举"""
@@ -19,6 +23,126 @@ class ElementType(Enum):
     COORDINATE_INFO = "coordinate_info"
     SECTOR = "sector"
     MEASUREMENT_LINE = "measurement_line"
+
+
+class SectorRegion:
+    """
+    扇形区域类 - 用于扇形斥力场计算
+    """
+    def __init__(self, center_x: float, center_y: float, radius: float,
+                 start_angle_deg: float, end_angle_deg: float):
+        """
+        初始化扇形区域
+        
+        Args:
+            center_x: 扇形圆心X坐标
+            center_y: 扇形圆心Y坐标
+            radius: 扇形半径
+            start_angle_deg: 起始角度（度数，从X轴正向逆时针）
+            end_angle_deg: 结束角度（度数）
+        """
+        self.center_x = center_x
+        self.center_y = center_y
+        self.radius = radius
+        self.start_angle_deg = start_angle_deg
+        self.end_angle_deg = end_angle_deg
+        
+        # 转换为弧度
+        self.start_angle_rad = math.radians(start_angle_deg)
+        self.end_angle_rad = math.radians(end_angle_deg)
+    
+    def contains_point(self, x: float, y: float) -> bool:
+        """
+        检查点是否在扇形内
+        
+        Args:
+            x: 点的X坐标
+            y: 点的Y坐标
+            
+        Returns:
+            True如果点在扇形内
+        """
+        # 计算点到圆心的距离
+        dx = x - self.center_x
+        dy = y - self.center_y
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        # 超出半径范围
+        if distance > self.radius:
+            return False
+        
+        # 🆕 特殊情况：圆心点始终在扇形内
+        if distance < 0.01:
+            return True
+        
+        # 计算点相对于圆心的角度
+        angle_rad = math.atan2(dy, dx)
+        angle_deg = math.degrees(angle_rad)
+        
+        # 归一化角度到 [0, 360) 范围
+        while angle_deg < 0:
+            angle_deg += 360
+        while angle_deg >= 360:
+            angle_deg -= 360
+        
+        # 归一化起始和结束角度到 [0, 360) 范围
+        start = self.start_angle_deg % 360
+        end = self.end_angle_deg % 360
+        if start < 0:
+            start += 360
+        if end < 0:
+            end += 360
+        
+        # 检查角度是否在扇形范围内
+        if start <= end:
+            return start <= angle_deg <= end
+        else:
+            # 跨越0度的情况
+            return angle_deg >= start or angle_deg <= end
+    
+    def get_repulsion_force(self, x: float, y: float) -> Tuple[float, float]:
+        """
+        计算扇形对点的斥力 - 增强版
+        
+        如果点在扇形内或靠近扇形边界，施加沿径向向外的强斥力
+        确保标签被强力弹出扇形区域
+        
+        Args:
+            x: 点的X坐标
+            y: 点的Y坐标
+            
+        Returns:
+            斥力向量 (force_x, force_y)
+        """
+        dx = x - self.center_x
+        dy = y - self.center_y
+        distance = math.sqrt(dx*dx + dy*dy)
+        
+        if distance < 0.01:
+            # 在圆心附近，向随机方向弹开
+            import random
+            angle = random.random() * 2 * math.pi
+            return (math.cos(angle) * 20.0, math.sin(angle) * 20.0)
+        
+        # 归一化方向向量（指向外部）
+        dir_x = dx / distance
+        dir_y = dy / distance
+        
+        # 计算斥力强度
+        force_strength = 0.0
+        
+        if self.contains_point(x, y):
+            # 🆕 在扇形内：超强斥力，确保标签被弹出
+            penetration_ratio = 1.0 - (distance / self.radius)
+            force_strength = 15.0 + penetration_ratio * 30.0  # 大幅增强斥力
+        else:
+            # 在扇形外但靠近边界：中等斥力
+            margin = 1.0  # 🆕 扩大警戒距离
+            if distance < self.radius + margin:
+                closeness = 1.0 - ((distance - self.radius) / margin) if distance > self.radius else 1.0
+                force_strength = closeness * 8.0  # 🆕 增强边界斥力
+        
+        return (dir_x * force_strength, dir_y * force_strength)
 
 class BoundingBox:
     """边界框类"""
@@ -81,9 +205,11 @@ class LayoutElement:
 
 class FastLayoutManager:
     """
-    高性能原生布局管理器
+    高性能原生布局管理器 V2.1
     
-    专门为家居设备坐标绘制场景优化的布局算法，提供比adjustText更好的性能
+    专门为家居设备坐标绘制场景优化的布局算法
+    核心改进：扇形斥力场、模拟退火扰动、分层计算
+    新增特性：12方向约束布局 - 设备标签只能出现在以设备点为圆心的12个方向（每30°一个）
     """
     
     def __init__(self, canvas_bounds: Tuple[float, float, float, float]):
@@ -96,19 +222,28 @@ class FastLayoutManager:
         self.canvas_bounds = BoundingBox(*canvas_bounds)
         self.elements: List[LayoutElement] = []
         
+        # 🆕 扇形斥力场管理
+        self.sector_regions: List[SectorRegion] = []
+        
         # 性能优化：缓存机制
         self._position_cache: Dict[str, Tuple[float, float]] = {}
         self._cache_valid = True
         
-        # 信息框尺寸配置
+        # 信息框尺寸配置（V2.2 更新：适应多行格式）
         self.info_box_sizes = {
-            ElementType.DEVICE_INFO: (2.0, 0.8),      # 设备信息框（优化尺寸）
+            ElementType.DEVICE_INFO: (2.0, 1.2),      # 设备信息框（增加高度适应多行）
             ElementType.MEASUREMENT_INFO: (2.6, 1.4), # 测量信息框  
             ElementType.COORDINATE_INFO: (2.3, 1.0),  # 坐标信息框
             ElementType.USER_POSITION: (1.5, 0.7),    # 用户位置标记
         }
         
-        # 高性能避让偏移量配置（预计算）
+        # 🆕 12方向约束配置（每30°一个方向）
+        self.direction_count = 12  # 12个方向
+        self.direction_angle_step = 30  # 每个方向间隔30度
+        self.max_label_distance = 3.0  # 标签最近顶点到设备点的最大距离
+        self.min_label_distance = 0.8  # 标签最近顶点到设备点的最小距离
+        
+        # 高性能避让偏移量配置（预计算）- 🆕 增加更多候选位置
         self.primary_offsets = [
             (1.2, 0.8),   # 右上（主要位置）
             (-1.2, 0.8),  # 左上
@@ -123,10 +258,26 @@ class FastLayoutManager:
             (0, -1.2),    # 下中
         ]
         
+        # 🆕 扩展候选位置（用于扇形避让时的更多选择）
+        self.extended_offsets = [
+            (2.2, 1.2),   # 远右上
+            (-2.2, 1.2),  # 远左上
+            (2.2, -1.2),  # 远右下
+            (-2.2, -1.2), # 远左下
+            (2.5, 0.5),   # 远右
+            (-2.5, 0.5),  # 远左
+        ]
+        
         # 布局质量阈值
         self.min_spacing = 0.15  # 最小间距
         self.overlap_penalty = 100.0  # 重叠惩罚系数
         self.boundary_penalty = 10.0  # 边界惩罚系数
+        self.sector_penalty = 1000.0   # 🆕 扇形区域惩罚系数（大幅增强，确保标签绝对避开扇形）
+        
+        # 🆕 模拟退火参数
+        self.initial_temperature = 1.0  # 初始温度
+        self.cooling_rate = 0.95        # 冷却速率
+        self.min_temperature = 0.01     # 最小温度
     
     def clear_elements(self):
         """清除所有元素"""
@@ -159,10 +310,394 @@ class FastLayoutManager:
         if len(self.elements) != original_count:
             self._invalidate_cache()
     
+    # ==================== 🆕 扇形斥力场管理 ====================
+    
+    def add_sector_region(self, center_x: float, center_y: float, radius: float,
+                         start_angle_deg: float, end_angle_deg: float):
+        """
+        添加扇形斥力场区域
+        
+        Args:
+            center_x: 扇形圆心X坐标
+            center_y: 扇形圆心Y坐标
+            radius: 扇形半径
+            start_angle_deg: 起始角度（度数）
+            end_angle_deg: 结束角度（度数）
+        """
+        sector = SectorRegion(center_x, center_y, radius, start_angle_deg, end_angle_deg)
+        self.sector_regions.append(sector)
+        self._invalidate_cache()
+        print(f"🔺 添加扇形斥力场: 圆心({center_x:.2f}, {center_y:.2f}), 半径{radius:.2f}, 角度[{start_angle_deg:.1f}°, {end_angle_deg:.1f}°]")
+    
+    def clear_sector_regions(self):
+        """清除所有扇形斥力场"""
+        if self.sector_regions:
+            self.sector_regions.clear()
+            self._invalidate_cache()
+            print("🔺 已清除所有扇形斥力场")
+    
+    def _is_box_in_sector(self, box: BoundingBox) -> bool:
+        """
+        检查边界框是否与任何扇形区域重叠
+        
+        Args:
+            box: 要检查的边界框
+            
+        Returns:
+            True如果边界框的任何角点或中心在扇形内
+        """
+        if not self.sector_regions:
+            return False
+        
+        # 获取边界框的中心和四个角点
+        center_x, center_y = box.center()
+        corners = [
+            (box.x_min, box.y_min),  # 左下
+            (box.x_max, box.y_min),  # 右下
+            (box.x_min, box.y_max),  # 左上
+            (box.x_max, box.y_max),  # 右上
+        ]
+        
+        # 检查所有点是否在任何扇形内
+        for sector in self.sector_regions:
+            # 检查中心点
+            if sector.contains_point(center_x, center_y):
+                return True
+            # 检查四个角点
+            for cx, cy in corners:
+                if sector.contains_point(cx, cy):
+                    return True
+        
+        return False
+    
+    def _calculate_sector_penalty(self, x: float, y: float) -> float:
+        """
+        计算点在所有扇形斥力场中的惩罚值
+        
+        Args:
+            x: 点的X坐标
+            y: 点的Y坐标
+            
+        Returns:
+            惩罚值（越高越差）
+        """
+        total_penalty = 0.0
+        
+        for sector in self.sector_regions:
+            if sector.contains_point(x, y):
+                # 在扇形内：极高惩罚（确保不会被选中）
+                dx = x - sector.center_x
+                dy = y - sector.center_y
+                distance = math.sqrt(dx*dx + dy*dy)
+                penetration_ratio = 1.0 - (distance / sector.radius) if sector.radius > 0 else 1.0
+                total_penalty += self.sector_penalty * (1.0 + penetration_ratio * 2.0)
+            else:
+                # 在扇形外：检查边界距离，给予警戒区惩罚
+                dx = x - sector.center_x
+                dy = y - sector.center_y
+                distance = math.sqrt(dx*dx + dy*dy)
+                
+                # 🆕 扩大警戒距离，从0.5增加到1.0
+                if distance < sector.radius + 1.0:  # 靠近扇形边界
+                    margin_penalty = (sector.radius + 1.0 - distance) * self.sector_penalty * 0.5
+                    total_penalty += margin_penalty
+        
+        return total_penalty
+    
+    def _get_sector_repulsion_force(self, x: float, y: float) -> Tuple[float, float]:
+        """
+        计算所有扇形对点的总斥力
+        
+        Args:
+            x: 点的X坐标
+            y: 点的Y坐标
+            
+        Returns:
+            总斥力向量 (force_x, force_y)
+        """
+        total_force_x = 0.0
+        total_force_y = 0.0
+        
+        for sector in self.sector_regions:
+            force_x, force_y = sector.get_repulsion_force(x, y)
+            total_force_x += force_x
+            total_force_y += force_y
+        
+        return (total_force_x, total_force_y)
+    
     def _invalidate_cache(self):
         """使缓存失效"""
         self._position_cache.clear()
         self._cache_valid = False
+    
+    # ==================== 🆕 12方向约束布局系统 ====================
+    
+    def _generate_12_direction_candidates(self, anchor_x: float, anchor_y: float,
+                                         box_width: float, box_height: float) -> List[Tuple[float, float, int]]:
+        """
+        生成12方向约束的候选位置
+        
+        标签的四个顶点中，离设备点最近的顶点必须位于12个方向之一（每30°）
+        同时满足距离约束（0.8 ≤ 距离 ≤ 3.0）
+        
+        Args:
+            anchor_x: 设备点X坐标
+            anchor_y: 设备点Y坐标
+            box_width: 标签框宽度
+            box_height: 标签框高度
+            
+        Returns:
+            候选位置列表 [(center_x, center_y, direction_index), ...]
+        """
+        candidates = []
+        
+        # 12个方向：0°, 30°, 60°, 90°, 120°, 150°, 180°, 210°, 240°, 270°, 300°, 330°
+        for direction_idx in range(self.direction_count):
+            angle_deg = direction_idx * self.direction_angle_step
+            angle_rad = math.radians(angle_deg)
+            
+            # 计算该方向上的单位向量
+            dir_x = math.cos(angle_rad)
+            dir_y = math.sin(angle_rad)
+            
+            # 根据方向确定标签的哪个顶点应该是最近顶点
+            # 并计算对应的标签中心偏移
+            corner_offset_x, corner_offset_y = self._get_corner_offset_for_direction(
+                dir_x, dir_y, box_width, box_height
+            )
+            
+            # 生成不同距离的候选位置（从近到远）
+            # 距离范围: 0.8 ~ 2.9（保留一点余量避免浮点数精度问题）
+            distances = [0.8, 1.0, 1.2, 1.5, 1.8, 2.0, 2.5, 2.9]
+            for distance in distances:
+                if distance > self.max_label_distance - 0.01:  # 添加小容差
+                    continue
+                    
+                # 计算顶点位置（在该方向上，距离设备点distance的位置）
+                corner_x = anchor_x + dir_x * distance
+                corner_y = anchor_y + dir_y * distance
+                
+                # 计算标签中心位置（根据顶点位置和偏移量）
+                center_x = corner_x + corner_offset_x
+                center_y = corner_y + corner_offset_y
+                
+                candidates.append((center_x, center_y, direction_idx))
+        
+        return candidates
+    
+    def _get_corner_offset_for_direction(self, dir_x: float, dir_y: float,
+                                         box_width: float, box_height: float) -> Tuple[float, float]:
+        """
+        根据方向确定标签中心相对于最近顶点的偏移
+        
+        当标签的某个顶点位于某方向时，需要计算标签中心相对于该顶点的位置。
+        例如：如果方向是右上（45°），则标签的左下顶点应该是最近顶点，
+        此时标签中心在该顶点的右上方偏移半个宽度和高度。
+        
+        Args:
+            dir_x: 方向向量X分量
+            dir_y: 方向向量Y分量
+            box_width: 标签框宽度
+            box_height: 标签框高度
+            
+        Returns:
+            (offset_x, offset_y) 标签中心相对于最近顶点的偏移
+        """
+        half_width = box_width / 2
+        half_height = box_height / 2
+        
+        # 根据方向向量判断应该使用哪个顶点作为最近顶点
+        # 然后计算从该顶点到中心的偏移
+        
+        # 如果方向指向右（dir_x > 0），则最近顶点应该在标签左侧
+        # 如果方向指向上（dir_y > 0），则最近顶点应该在标签下侧
+        
+        if dir_x >= 0:
+            # 方向指向右侧，最近顶点在左侧，中心在顶点右边
+            offset_x = half_width
+        else:
+            # 方向指向左侧，最近顶点在右侧，中心在顶点左边
+            offset_x = -half_width
+        
+        if dir_y >= 0:
+            # 方向指向上方，最近顶点在下方，中心在顶点上方
+            offset_y = half_height
+        else:
+            # 方向指向下方，最近顶点在上方，中心在顶点下方
+            offset_y = -half_height
+        
+        return (offset_x, offset_y)
+    
+    def _get_nearest_corner_distance(self, center_x: float, center_y: float,
+                                     box_width: float, box_height: float,
+                                     anchor_x: float, anchor_y: float) -> Tuple[float, Tuple[float, float]]:
+        """
+        计算标签四个顶点中离设备点最近的顶点及其距离
+        
+        Args:
+            center_x: 标签中心X坐标
+            center_y: 标签中心Y坐标
+            box_width: 标签宽度
+            box_height: 标签高度
+            anchor_x: 设备点X坐标
+            anchor_y: 设备点Y坐标
+            
+        Returns:
+            (最小距离, (最近顶点X, 最近顶点Y))
+        """
+        half_width = box_width / 2
+        half_height = box_height / 2
+        
+        # 四个顶点
+        corners = [
+            (center_x - half_width, center_y - half_height),  # 左下
+            (center_x + half_width, center_y - half_height),  # 右下
+            (center_x - half_width, center_y + half_height),  # 左上
+            (center_x + half_width, center_y + half_height),  # 右上
+        ]
+        
+        min_dist = float('inf')
+        nearest_corner = corners[0]
+        
+        for corner in corners:
+            dist = math.sqrt((corner[0] - anchor_x)**2 + (corner[1] - anchor_y)**2)
+            if dist < min_dist:
+                min_dist = dist
+                nearest_corner = corner
+        
+        return (min_dist, nearest_corner)
+    
+    def _is_corner_on_12_directions(self, corner_x: float, corner_y: float,
+                                    anchor_x: float, anchor_y: float,
+                                    tolerance_deg: float = 5.0) -> bool:
+        """
+        检查顶点是否位于12个方向之一
+        
+        Args:
+            corner_x: 顶点X坐标
+            corner_y: 顶点Y坐标
+            anchor_x: 设备点X坐标
+            anchor_y: 设备点Y坐标
+            tolerance_deg: 角度容差（度），默认5度
+            
+        Returns:
+            True如果顶点位于12个方向之一
+        """
+        dx = corner_x - anchor_x
+        dy = corner_y - anchor_y
+        
+        # 计算顶点相对于设备点的角度
+        angle_rad = math.atan2(dy, dx)
+        angle_deg = math.degrees(angle_rad)
+        
+        # 归一化到 [0, 360) 范围
+        if angle_deg < 0:
+            angle_deg += 360
+        
+        # 检查是否接近12个方向之一
+        for direction_idx in range(self.direction_count):
+            target_angle = direction_idx * self.direction_angle_step
+            
+            # 计算角度差（考虑360°循环）
+            angle_diff = abs(angle_deg - target_angle)
+            if angle_diff > 180:
+                angle_diff = 360 - angle_diff
+            
+            if angle_diff <= tolerance_deg:
+                return True
+        
+        return False
+    
+    def calculate_device_label_position(self, anchor_x: float, anchor_y: float,
+                                       element_id: str = "") -> Tuple[float, float]:
+        """
+        计算设备标签的最优位置（12方向约束版）
+        
+        设备标签只能出现在以设备点为圆心的12个方向（每30°）上，
+        标签最近顶点到设备点的距离不能超过3。
+        
+        Args:
+            anchor_x: 设备点X坐标
+            anchor_y: 设备点Y坐标
+            element_id: 元素ID
+            
+        Returns:
+            最佳标签中心位置 (x, y)
+        """
+        # 获取设备标签尺寸
+        box_width, box_height = self.info_box_sizes.get(ElementType.DEVICE_INFO, (2.0, 0.8))
+        
+        # 生成12方向候选位置
+        candidates = self._generate_12_direction_candidates(
+            anchor_x, anchor_y, box_width, box_height
+        )
+        
+        # 预计算现有元素的边界框
+        existing_boxes = [elem.bounding_box for elem in self.elements 
+                         if elem.element_id != element_id]
+        
+        best_position = None
+        best_score = float('inf')
+        
+        for center_x, center_y, direction_idx in candidates:
+            # 创建候选边界框
+            candidate_box = BoundingBox(
+                center_x - box_width/2,
+                center_y - box_height/2,
+                center_x + box_width/2,
+                center_y + box_height/2
+            )
+            
+            # 快速边界检查
+            if not self._is_within_canvas(candidate_box):
+                continue
+            
+            # 检查是否在扇形内（强制跳过）
+            if self._is_box_in_sector(candidate_box):
+                continue
+            
+            # 验证最近顶点约束
+            min_dist, nearest_corner = self._get_nearest_corner_distance(
+                center_x, center_y, box_width, box_height, anchor_x, anchor_y
+            )
+            
+            # 检查距离约束
+            if min_dist > self.max_label_distance:
+                continue
+            
+            # 检查最近顶点是否在12方向上
+            if not self._is_corner_on_12_directions(
+                nearest_corner[0], nearest_corner[1], anchor_x, anchor_y
+            ):
+                continue
+            
+            # 计算位置评分
+            score = self._calculate_position_score(candidate_box, existing_boxes, anchor_x, anchor_y)
+            
+            # 添加距离奖励（优先选择较近的位置）
+            score += min_dist * 5.0
+            
+            if score < best_score:
+                best_score = score
+                best_position = (center_x, center_y)
+                
+                # 早期退出：找到无冲突位置
+                if score < 1.0:
+                    break
+        
+        # 如果没有找到合适位置，使用默认位置（右上方向，距离1.2）
+        if best_position is None:
+            default_angle = math.radians(45)  # 默认右上方向
+            default_distance = 1.2
+            corner_x = anchor_x + math.cos(default_angle) * default_distance
+            corner_y = anchor_y + math.sin(default_angle) * default_distance
+            corner_offset_x, corner_offset_y = self._get_corner_offset_for_direction(
+                math.cos(default_angle), math.sin(default_angle), box_width, box_height
+            )
+            best_position = (corner_x + corner_offset_x, corner_y + corner_offset_y)
+            print(f"⚠️ 12方向约束：未找到合适位置，使用默认位置")
+        
+        return best_position
     
     def calculate_optimal_position(self, 
                                  anchor_x: float, 
@@ -172,6 +707,9 @@ class FastLayoutManager:
                                  preferred_offset: Tuple[float, float] = None) -> Tuple[float, float]:
         """
         高性能位置计算算法
+        
+        对于设备标签（DEVICE_INFO），使用12方向约束布局
+        对于其他类型标签，使用传统的候选位置算法
         
         Args:
             anchor_x: 锚点X坐标
@@ -193,6 +731,12 @@ class FastLayoutManager:
             self._position_cache[cache_key] = result
             return result
         
+        # 🆕 设备标签使用12方向约束布局
+        if element_type == ElementType.DEVICE_INFO:
+            result = self.calculate_device_label_position(anchor_x, anchor_y, element_id)
+            self._position_cache[cache_key] = result
+            return result
+        
         box_width, box_height = self.info_box_sizes[element_type]
         
         # 快速路径：如果没有其他元素，使用默认位置
@@ -207,6 +751,10 @@ class FastLayoutManager:
             candidate_offsets.append(preferred_offset)
         candidate_offsets.extend(self.primary_offsets)
         candidate_offsets.extend(self.secondary_offsets)
+        
+        # 🆕 如果存在扇形斥力场，添加扩展候选位置
+        if self.sector_regions:
+            candidate_offsets.extend(self.extended_offsets)
         
         best_position = None
         best_score = float('inf')
@@ -229,6 +777,10 @@ class FastLayoutManager:
             
             # 快速边界检查
             if not self._is_within_canvas(candidate_box):
+                continue
+            
+            # 🆕 强制检查：完全跳过在扇形内的候选位置
+            if self._is_box_in_sector(candidate_box):
                 continue
             
             # 快速冲突检测（包含锚点距离惩罚）
@@ -288,7 +840,7 @@ class FastLayoutManager:
                                 anchor_x: float = None,
                                 anchor_y: float = None) -> float:
         """
-        快速位置评分算法 - 优化版
+        快速位置评分算法 - V2.0 增强版
         
         Args:
             candidate_box: 候选边界框
@@ -300,6 +852,12 @@ class FastLayoutManager:
             位置评分（越低越好，0表示无冲突）
         """
         score = 0.0
+        box_center_x, box_center_y = candidate_box.center()
+        
+        # 🆕 扇形斥力场惩罚（最高优先级）
+        sector_penalty = self._calculate_sector_penalty(box_center_x, box_center_y)
+        if sector_penalty > 0:
+            score += sector_penalty
         
         for existing_box in existing_boxes:
             if candidate_box.overlaps(existing_box):
@@ -312,23 +870,28 @@ class FastLayoutManager:
                 if distance < self.min_spacing * 3:
                     score += max(0, (self.min_spacing * 3 - distance)) * 2.0
         
-        # 🎯 新增：距离锚点的惩罚（核心优化）
+        # 🎯 距离锚点的惩罚（核心优化）
         if anchor_x is not None and anchor_y is not None:
-            box_center_x, box_center_y = candidate_box.center()
             anchor_distance = math.sqrt((box_center_x - anchor_x)**2 + (box_center_y - anchor_y)**2)
             
             # 距离惩罚：离锚点越远，惩罚越大（鼓励标签靠近自己的设备点）
-            if anchor_distance > 1.8:  # 超过1.8个单位距离时开始重惩罚
-                score += (anchor_distance - 1.8) * 50.0  # 超强距离惩罚
-            elif anchor_distance > 1.5:  # 超过1.5个单位距离时中惩罚
-                score += (anchor_distance - 1.5) * 15.0  # 中距离惩罚
-            elif anchor_distance > 1.2:  # 超过1.2个单位距离时轻惩罚
-                score += (anchor_distance - 1.2) * 3.0   # 轻距离惩罚
+            # 🆕 如果在扇形内，放宽距离惩罚（允许标签远离以避开扇形）
+            if sector_penalty > 0:
+                # 在扇形区域内，放宽距离限制
+                if anchor_distance > 2.5:
+                    score += (anchor_distance - 2.5) * 20.0
+            else:
+                # 正常距离惩罚
+                if anchor_distance > 1.8:
+                    score += (anchor_distance - 1.8) * 50.0
+                elif anchor_distance > 1.5:
+                    score += (anchor_distance - 1.5) * 15.0
+                elif anchor_distance > 1.2:
+                    score += (anchor_distance - 1.2) * 3.0
         
         # 边界惩罚：离边界太近的位置（更严格）
         canvas_center_x = (self.canvas_bounds.x_min + self.canvas_bounds.x_max) / 2
         canvas_center_y = (self.canvas_bounds.y_min + self.canvas_bounds.y_max) / 2
-        box_center_x, box_center_y = candidate_box.center()
         
         # 计算到画布中心的距离（归一化）
         canvas_width = self.canvas_bounds.x_max - self.canvas_bounds.x_min
@@ -366,16 +929,70 @@ class FastLayoutManager:
     
     def compute_layout(self, iterations: int = 50):
         """
-        执行力导向布局计算
+        执行力导向布局计算 - V2.0 增强版
         
-        使用简化的力导向算法调整可移动元素的位置，避免重叠
+        核心改进：
+        1. 扇形斥力场 - 标签进入扇形区域会被强力弹开
+        2. 模拟退火扰动 - 避免陷入局部最优解
+        3. 分层计算 - 按优先级依次处理不同类型的标签
         
         Args:
             iterations: 迭代次数
         """
-        movable_elements = [e for e in self.elements if e.movable and not e.static]
+        # 🆕 分层计算：按优先级分组
+        device_elements = [e for e in self.elements if e.movable and not e.static 
+                          and e.element_type == ElementType.DEVICE_INFO]
+        measurement_elements = [e for e in self.elements if e.movable and not e.static 
+                               and e.element_type == ElementType.MEASUREMENT_INFO]
+        user_elements = [e for e in self.elements if e.movable and not e.static 
+                        and e.element_type == ElementType.USER_POSITION]
+        other_elements = [e for e in self.elements if e.movable and not e.static 
+                         and e.element_type not in [ElementType.DEVICE_INFO, 
+                                                     ElementType.MEASUREMENT_INFO, 
+                                                     ElementType.USER_POSITION]]
         
-        if not movable_elements:
+        # 第1轮：处理设备标签
+        if device_elements:
+            self._compute_layer_layout(device_elements, iterations // 2)
+            # 🆕 固定设备标签
+            for elem in device_elements:
+                elem.movable = False
+        
+        # 第2轮：处理测量标签
+        if measurement_elements:
+            self._compute_layer_layout(measurement_elements, iterations // 2)
+            # 固定测量标签
+            for elem in measurement_elements:
+                elem.movable = False
+        
+        # 第3轮：处理用户位置标签
+        if user_elements:
+            self._compute_layer_layout(user_elements, iterations // 3)
+            # 固定用户位置标签
+            for elem in user_elements:
+                elem.movable = False
+        
+        # 第4轮：处理其他标签
+        if other_elements:
+            self._compute_layer_layout(other_elements, iterations // 3)
+        
+        # 恢复所有元素的可移动状态（供下次计算使用）
+        for elem in self.elements:
+            if not elem.static:
+                elem.movable = True
+        
+        # 使缓存失效
+        self._invalidate_cache()
+    
+    def _compute_layer_layout(self, layer_elements: List[LayoutElement], iterations: int):
+        """
+        单层布局计算（带扰动机制）
+        
+        Args:
+            layer_elements: 当前层的元素列表
+            iterations: 迭代次数
+        """
+        if not layer_elements:
             return
         
         # 力导向参数
@@ -383,14 +1000,28 @@ class FastLayoutManager:
         anchor_attraction = 0.2   # 锚点吸引力强度
         damping = 0.85            # 阻尼系数
         
+        # 🆕 模拟退火参数
+        temperature = self.initial_temperature
+        
         for iteration in range(iterations):
             max_movement = 0.0
             
-            for element in movable_elements:
+            # 🆕 计算当前温度（逐渐降低）
+            temperature = self.initial_temperature * (self.cooling_rate ** iteration)
+            temperature = max(temperature, self.min_temperature)
+            
+            for element in layer_elements:
                 force_x = 0.0
                 force_y = 0.0
                 
-                # 计算排斥力（来自其他元素）
+                # 🆕 扇形斥力场
+                sector_force_x, sector_force_y = self._get_sector_repulsion_force(
+                    element.current_x, element.current_y
+                )
+                force_x += sector_force_x
+                force_y += sector_force_y
+                
+                # 计算排斥力（来自所有元素，包括已固定的）
                 for other in self.elements:
                     if other is element:
                         continue
@@ -417,23 +1048,37 @@ class FastLayoutManager:
                         force_x += repulsion * dx / dist
                         force_y += repulsion * dy / dist
                 
-                # 计算锚点吸引力
+                # 计算锚点吸引力（🆕 在扇形区域内时减弱吸引力）
                 anchor_x, anchor_y = element.anchor_point
                 dx_anchor = anchor_x - element.current_x
                 dy_anchor = anchor_y - element.current_y
                 anchor_dist = math.sqrt(dx_anchor*dx_anchor + dy_anchor*dy_anchor)
                 
+                # 🆕 检查锚点是否在扇形内
+                anchor_in_sector = self._calculate_sector_penalty(anchor_x, anchor_y) > 0
+                
                 if anchor_dist > 0.5:
                     # 超过一定距离时，吸引回锚点附近
-                    force_x += anchor_attraction * dx_anchor
-                    force_y += anchor_attraction * dy_anchor
+                    attraction = anchor_attraction
+                    if anchor_in_sector:
+                        attraction *= 0.3  # 🆕 如果锚点在扇形内，减弱吸引力
+                    
+                    force_x += attraction * dx_anchor
+                    force_y += attraction * dy_anchor
+                
+                # 🆕 扰动机制：在高温时添加随机扰动
+                if temperature > self.min_temperature * 2:
+                    perturbation_x = random.gauss(0, temperature * 0.3)
+                    perturbation_y = random.gauss(0, temperature * 0.3)
+                    force_x += perturbation_x
+                    force_y += perturbation_y
                 
                 # 应用力（带阻尼）
                 move_x = force_x * damping
                 move_y = force_y * damping
                 
                 # 限制单次移动距离
-                max_move = 0.5
+                max_move = 0.5 + temperature * 0.3  # 🆕 高温时允许更大移动
                 move_dist = math.sqrt(move_x*move_x + move_y*move_y)
                 if move_dist > max_move:
                     move_x = move_x / move_dist * max_move
@@ -457,12 +1102,9 @@ class FastLayoutManager:
                 element.current_x = new_x
                 element.current_y = new_y
             
-            # 如果移动量很小，提前结束
-            if max_movement < 0.01:
+            # 🆕 只有在低温且移动量很小时才提前结束
+            if temperature < self.min_temperature * 3 and max_movement < 0.01:
                 break
-        
-        # 使缓存失效
-        self._invalidate_cache()
     
     def _get_bbox_at_position(self, element: LayoutElement, x: float, y: float) -> BoundingBox:
         """

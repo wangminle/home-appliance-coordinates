@@ -20,10 +20,22 @@ class Device:
     """
     设备模型类
     
-    表示一个家居设备的完整信息，包括名称、坐标位置等属性
+    表示一个家居设备的完整信息，包括名称、坐标位置、颜色等属性
     """
     
-    def __init__(self, name: str, x: float, y: float, device_id: Optional[str] = None):
+    # 预定义的设备颜色常量
+    COLOR_RED = '#c62828'      # 红色（默认）
+    COLOR_GREEN = '#2e7d32'    # 绿色
+    COLOR_BLUE = '#1565c0'     # 蓝色
+    COLOR_ORANGE = '#ef6c00'   # 橙色
+    COLOR_PURPLE = '#6a1b9a'   # 紫色
+    COLOR_CYAN = '#00838f'     # 青色
+    
+    # 有效颜色列表
+    VALID_COLORS = [COLOR_RED, COLOR_GREEN, COLOR_BLUE, COLOR_ORANGE, COLOR_PURPLE, COLOR_CYAN]
+    
+    def __init__(self, name: str, x: float, y: float, device_id: Optional[str] = None,
+                 color: Optional[str] = None):
         """
         初始化设备实例
         
@@ -32,6 +44,7 @@ class Device:
             x: X轴坐标
             y: Y轴坐标  
             device_id: 设备唯一标识符，可选，默认自动生成
+            color: 设备颜色，可选，默认红色。支持预定义颜色或任意十六进制颜色值
         """
         # 在赋值前进行严格验证
         if Validator:
@@ -53,6 +66,9 @@ class Device:
         self.y = float(y)
         self.created_time = datetime.now()
         
+        # 设备颜色属性 ✨ 新增功能
+        self.color = self._validate_color(color)
+        
         # 信息框位置状态管理 ✨ 智能避让功能（简化版）
         self.current_info_position: Optional[str] = None  # 当前信息框位置
         self.default_info_position: Optional[str] = None  # 默认信息框位置
@@ -69,6 +85,37 @@ class Device:
             UUID格式的设备标识符
         """
         return str(uuid.uuid4())
+    
+    def _validate_color(self, color: Optional[str]) -> str:
+        """
+        验证并返回有效的颜色值
+        
+        Args:
+            color: 输入的颜色值，可以是预定义颜色或十六进制颜色
+            
+        Returns:
+            有效的颜色值，如果无效则返回默认红色
+        """
+        if color is None:
+            return self.COLOR_RED
+        
+        # 如果是预定义颜色，直接返回
+        if color in self.VALID_COLORS:
+            return color
+        
+        # 验证十六进制颜色格式 (#RRGGBB 或 #RGB)
+        if isinstance(color, str) and color.startswith('#'):
+            hex_part = color[1:]
+            if len(hex_part) in (3, 6):
+                try:
+                    int(hex_part, 16)
+                    return color
+                except ValueError:
+                    pass
+        
+        # 无效颜色，返回默认值
+        print(f"⚠️ 无效的颜色值 '{color}'，使用默认红色")
+        return self.COLOR_RED
     
     def _validate(self):
         """
@@ -108,6 +155,15 @@ class Device:
         self.name = name
         self._validate()
     
+    def set_color(self, color: str):
+        """
+        设置设备颜色
+        
+        Args:
+            color: 新的颜色值，可以是预定义颜色或十六进制颜色
+        """
+        self.color = self._validate_color(color)
+    
     def to_dict(self) -> Dict[str, Any]:
         """
         将设备对象转换为字典格式
@@ -120,6 +176,7 @@ class Device:
             'name': self.name,
             'x': self.x,
             'y': self.y,
+            'color': self.color,  # ✨ 新增颜色属性
             'created_time': self.created_time.isoformat()
         }
         
@@ -147,7 +204,8 @@ class Device:
             name=data['name'],
             x=data['x'],
             y=data['y'],
-            device_id=data.get('id')
+            device_id=data.get('id'),
+            color=data.get('color')  # ✨ 恢复颜色属性
         )
         
         # 如果有创建时间信息，则恢复

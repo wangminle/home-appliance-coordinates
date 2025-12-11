@@ -54,6 +54,8 @@ class InputPanel:
         self.user_x_var = tk.StringVar(value="0.0")
         self.user_y_var = tk.StringVar(value="0.0")
         self.user_position_frame = None  # 用户位置设置框架引用
+        self.user_x_entry = None  # 用户X坐标输入框引用
+        self.user_y_entry = None  # 用户Y坐标输入框引用
         
         # 设备管理相关
         self.devices: List[Device] = []  # 仅用于缓存显示，实际数据由DeviceManager管理
@@ -61,7 +63,19 @@ class InputPanel:
         self.device_name_var = tk.StringVar()
         self.device_x_var = tk.StringVar()
         self.device_y_var = tk.StringVar()
+        self.device_color_var = tk.StringVar(value="红色")  # ✨ 新增颜色选择
         self.selected_device_id = None
+        
+        # 颜色映射表 ✨ 新增
+        self.COLOR_OPTIONS = {
+            "红色": Device.COLOR_RED,
+            "绿色": Device.COLOR_GREEN,
+            "蓝色": Device.COLOR_BLUE,
+            "橙色": Device.COLOR_ORANGE,
+            "紫色": Device.COLOR_PURPLE,
+            "青色": Device.COLOR_CYAN,
+        }
+        self.COLOR_NAMES = {v: k for k, v in self.COLOR_OPTIONS.items()}  # 反向映射
         
         # 按钮组件引用
         self.add_update_button = None
@@ -69,6 +83,7 @@ class InputPanel:
         self.name_entry = None
         self.x_entry = None
         self.y_entry = None
+        self.color_combobox = None  # ✨ 新增颜色选择框引用
         
         # 回调函数
         self.on_range_change_callback: Optional[Callable[[float, float], None]] = None
@@ -241,14 +256,16 @@ class InputPanel:
             font=('Arial', 10)
         ).pack(side='left', padx=(0, 5))
         
-        user_x_entry = ttk.Entry(
+        self.user_x_entry = ttk.Entry(
             user_pos_input_frame,
             textvariable=self.user_x_var,
             width=8,
             font=('Arial', 10),
             justify='center'
         )
-        user_x_entry.pack(side='left', padx=(0, 15))
+        self.user_x_entry.pack(side='left', padx=(0, 15))
+        # 绑定点击事件确保获取焦点
+        self.user_x_entry.bind('<Button-1>', lambda e: self.user_x_entry.focus_set())
         
         # Y坐标输入
         ttk.Label(
@@ -257,14 +274,16 @@ class InputPanel:
             font=('Arial', 10)
         ).pack(side='left', padx=(0, 5))
         
-        user_y_entry = ttk.Entry(
+        self.user_y_entry = ttk.Entry(
             user_pos_input_frame,
             textvariable=self.user_y_var,
             width=8,
             font=('Arial', 10),
             justify='center'
         )
-        user_y_entry.pack(side='left', padx=(0, 15))
+        self.user_y_entry.pack(side='left', padx=(0, 15))
+        # 绑定点击事件确保获取焦点
+        self.user_y_entry.bind('<Button-1>', lambda e: self.user_y_entry.focus_set())
         
         # 设置用户位置按钮（同一行右侧）
         set_user_pos_btn = ttk.Button(
@@ -334,27 +353,29 @@ class InputPanel:
     
     def _create_device_section(self, parent):
         """
-        创建设备管理区域 (使用ttk.Treeview重构)
+        创建设备管理区域 (使用ttk.Treeview重构) - V2.2 增加颜色选择
         """
         device_frame = ttk.LabelFrame(parent, text="设备管理", padding=(10, 10))
         device_frame.pack(fill='both', expand=True, padx=10, pady=5)
         
-        # Treeview for device list
+        # Treeview for device list（增加颜色列）
         tree_frame = ttk.Frame(device_frame)
         tree_frame.pack(fill='both', expand=True, pady=(0, 10))
         
         self.device_treeview = ttk.Treeview(
             tree_frame,
-            columns=("name", "x", "y"),
+            columns=("name", "x", "y", "color"),
             show="headings",
             selectmode="browse"
         )
         self.device_treeview.heading("name", text="设备名称")
         self.device_treeview.heading("x", text="X坐标")
         self.device_treeview.heading("y", text="Y坐标")
-        self.device_treeview.column("name", width=180)
-        self.device_treeview.column("x", width=100, anchor='center')
-        self.device_treeview.column("y", width=100, anchor='center')
+        self.device_treeview.heading("color", text="颜色")
+        self.device_treeview.column("name", width=140)
+        self.device_treeview.column("x", width=80, anchor='center')
+        self.device_treeview.column("y", width=80, anchor='center')
+        self.device_treeview.column("color", width=60, anchor='center')
 
         scrollbar = ttk.Scrollbar(tree_frame, orient="vertical", command=self.device_treeview.yview)
         self.device_treeview.configure(yscrollcommand=scrollbar.set)
@@ -379,6 +400,18 @@ class InputPanel:
         ttk.Label(input_frame, text="Y坐标:", width=8).grid(row=2, column=0, sticky='w', pady=2)
         self.y_entry = ttk.Entry(input_frame, textvariable=self.device_y_var)
         self.y_entry.grid(row=2, column=1, sticky='ew', pady=2)
+        
+        # ✨ 新增颜色选择下拉框
+        ttk.Label(input_frame, text="颜色:", width=8).grid(row=3, column=0, sticky='w', pady=2)
+        self.color_combobox = ttk.Combobox(
+            input_frame, 
+            textvariable=self.device_color_var,
+            values=list(self.COLOR_OPTIONS.keys()),
+            state='readonly',
+            width=15
+        )
+        self.color_combobox.grid(row=3, column=1, sticky='w', pady=2)
+        self.color_combobox.set("红色")  # 默认选择红色
         
         input_frame.columnconfigure(1, weight=1)
 
@@ -488,6 +521,9 @@ class InputPanel:
                 self.device_name_var.set(device.name)
                 self.device_x_var.set(str(device.x))
                 self.device_y_var.set(str(device.y))
+                # ✨ 设置颜色选择
+                color_name = self.COLOR_NAMES.get(device.color, "红色")
+                self.device_color_var.set(color_name)
                 self.add_update_button.config(text="更新设备")
                 self.delete_button.config(state='normal')
                 self._set_input_state('normal')
@@ -499,21 +535,25 @@ class InputPanel:
             self._set_input_state('normal') # Keep inputs enabled for adding
     
     def _on_add_or_update(self):
-        # This method now handles both adding and updating
+        # This method now handles both adding and updating - V2.2 支持颜色
         try:
             name = self.device_name_var.get().strip()
             x = float(self.device_x_var.get())
             y = float(self.device_y_var.get())
             
+            # ✨ 获取选中的颜色
+            color_name = self.device_color_var.get()
+            color = self.COLOR_OPTIONS.get(color_name, Device.COLOR_RED)
+            
             if self.selected_device_id and self.on_device_update_callback:
                 # Update logic
                 old_device = self._get_device_by_id(self.selected_device_id)
                 if old_device:
-                    new_device = Device(name, x, y, device_id=old_device.id)
+                    new_device = Device(name, x, y, device_id=old_device.id, color=color)
                     self.on_device_update_callback(old_device, new_device)
             elif self.on_device_add_callback:
                 # Add logic
-                new_device = Device(name, x, y)
+                new_device = Device(name, x, y, color=color)
                 self.on_device_add_callback(new_device)
             
             self._clear_device_inputs()
@@ -565,7 +605,7 @@ class InputPanel:
     
     def _refresh_device_list(self):
         """
-        刷新Treeview中的设备列表
+        刷新Treeview中的设备列表 - V2.2 显示颜色信息
         """
         # Clear existing items
         for item in self.device_treeview.get_children():
@@ -573,9 +613,11 @@ class InputPanel:
             
         # Add new items
         for device in self.devices:
+            # ✨ 获取颜色名称
+            color_name = self.COLOR_NAMES.get(device.color, "红色")
             self.device_treeview.insert(
                 "", "end", iid=device.id, 
-                values=(device.name, f"{device.x:.3f}", f"{device.y:.3f}")
+                values=(device.name, f"{device.x:.3f}", f"{device.y:.3f}", color_name)
             )
         self._on_device_select() # Update button states
     
@@ -583,6 +625,7 @@ class InputPanel:
         self.device_name_var.set("")
         self.device_x_var.set("")
         self.device_y_var.set("")
+        self.device_color_var.set("红色")  # ✨ 重置颜色为默认红色
         if self.device_treeview.selection():
             self.device_treeview.selection_set('')
         self.selected_device_id = None
@@ -592,6 +635,9 @@ class InputPanel:
         self.name_entry.config(state=state)
         self.x_entry.config(state=state)
         self.y_entry.config(state=state)
+        # ✨ V2.2 增加颜色选择框状态控制
+        if self.color_combobox:
+            self.color_combobox.config(state='readonly' if state == 'normal' else 'disabled')
         
     def _get_device_by_id(self, device_id: str) -> Optional[Device]:
         for device in self.devices:

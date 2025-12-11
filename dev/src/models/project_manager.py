@@ -89,9 +89,12 @@ class ProjectManager:
                     devices: List[Device],
                     coordinate_settings: Dict[str, float],
                     user_coord_settings: Optional[Dict[str, Any]] = None,
-                    project_info: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
+                    project_info: Optional[Dict[str, str]] = None,
+                    label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[bool, str]:
         """
         保存项目到JSON文件
+        
+        V2.1: 添加标签位置持久化支持
         
         Args:
             file_path: 保存路径
@@ -99,6 +102,7 @@ class ProjectManager:
             coordinate_settings: 坐标系统设置 {'x_range': 5.0, 'y_range': 5.0}
             user_coord_settings: 用户坐标系设置（可选）
             project_info: 项目信息（可选）
+            label_positions: 标签位置字典（可选，仅保存手动位置）
             
         Returns:
             (成功标志, 消息)
@@ -109,7 +113,8 @@ class ProjectManager:
                 devices,
                 coordinate_settings,
                 user_coord_settings,
-                project_info
+                project_info,
+                label_positions
             )
             
             # 验证数据
@@ -149,12 +154,15 @@ class ProjectManager:
                    devices: List[Device],
                    coordinate_settings: Dict[str, float],
                    user_coord_settings: Optional[Dict[str, Any]] = None,
-                   project_info: Optional[Dict[str, str]] = None) -> Tuple[bool, str]:
+                   project_info: Optional[Dict[str, str]] = None,
+                   label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[bool, str]:
         """
         保存草稿到JSON文件（不更新项目状态）
         
         与 save_project 类似，但不会修改 current_project_path 和 is_modified 状态。
         专门用于自动保存功能。
+        
+        V2.1: 添加标签位置持久化支持
         
         Args:
             file_path: 保存路径
@@ -162,6 +170,7 @@ class ProjectManager:
             coordinate_settings: 坐标系统设置
             user_coord_settings: 用户坐标系设置（可选）
             project_info: 项目信息（可选）
+            label_positions: 标签位置字典（可选）
             
         Returns:
             (成功标志, 消息)
@@ -172,7 +181,8 @@ class ProjectManager:
                 devices,
                 coordinate_settings,
                 user_coord_settings,
-                project_info
+                project_info,
+                label_positions
             )
             
             # 验证数据
@@ -234,6 +244,11 @@ class ProjectManager:
             
             # 解析设备数据
             project_data['devices_parsed'] = self._parse_devices(project_data.get('devices', []))
+            
+            # V2.1: 解析标签位置（如果有）
+            if 'label_positions' in project_data:
+                label_count = len(project_data['label_positions'])
+                print(f"📍 加载 {label_count} 个手动标签位置")
             
             # 更新项目状态
             self.set_project_path(str(file_path_obj))
@@ -387,15 +402,19 @@ class ProjectManager:
                            devices: List[Device],
                            coordinate_settings: Dict[str, float],
                            user_coord_settings: Optional[Dict[str, Any]] = None,
-                           project_info: Optional[Dict[str, str]] = None) -> Dict[str, Any]:
+                           project_info: Optional[Dict[str, str]] = None,
+                           label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
         """
         构建项目数据结构
+        
+        V2.1: 添加标签位置持久化支持
         
         Args:
             devices: 设备列表
             coordinate_settings: 坐标设置
             user_coord_settings: 用户坐标系设置
             project_info: 项目信息
+            label_positions: 标签位置字典（仅保存手动位置）
             
         Returns:
             项目数据字典
@@ -422,6 +441,7 @@ class ProjectManager:
                 'name': device.name,
                 'x': device.x,
                 'y': device.y,
+                'color': device.color,  # ✨ 保存设备颜色
                 'created_time': device.created_time.isoformat() if hasattr(device.created_time, 'isoformat') else str(device.created_time)
             }
             for device in devices
@@ -442,6 +462,17 @@ class ProjectManager:
             'user_coordinate_system': user_coord_settings,
             'devices': devices_data
         }
+        
+        # V2.1: 添加标签位置（仅保存手动设置的位置）
+        if label_positions:
+            # 过滤出手动位置
+            manual_positions = {
+                k: v for k, v in label_positions.items()
+                if isinstance(v, dict) and v.get('is_manual', False)
+            }
+            if manual_positions:
+                project_data['label_positions'] = manual_positions
+                print(f"💾 保存 {len(manual_positions)} 个手动标签位置")
         
         return project_data
     
@@ -515,7 +546,8 @@ class ProjectManager:
                     name=device_data['name'],
                     x=device_data['x'],
                     y=device_data['y'],
-                    device_id=device_data.get('id')
+                    device_id=device_data.get('id'),
+                    color=device_data.get('color')  # ✨ 加载设备颜色
                 )
                 # 恢复创建时间
                 if 'created_time' in device_data:

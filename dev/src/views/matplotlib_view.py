@@ -119,6 +119,13 @@ class MatplotlibView:
         self.on_mouse_move_callback: Optional[Callable[[float, float], None]] = None
         self.on_double_click_callback: Optional[Callable[[float, float], None]] = None
         
+        # ✨ 标签拖拽功能 - 状态变量
+        self._dragging_label: Optional[any] = None  # 当前正在拖拽的标签对象
+        self._drag_start_pos: Optional[Tuple[float, float]] = None  # 拖拽起始位置
+        self._label_original_pos: Optional[Tuple[float, float]] = None  # 标签原始位置
+        self._draggable_labels: List[any] = []  # 所有可拖拽的标签列表
+        self._is_dragging: bool = False  # 是否正在拖拽
+        
         # 初始化Matplotlib组件
         self._setup_matplotlib()
         
@@ -142,6 +149,7 @@ class MatplotlibView:
         self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
         self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
         self.canvas.mpl_connect('axes_leave_event', self._on_mouse_leave)
+        self.canvas.mpl_connect('button_release_event', self._on_mouse_release)  # ✨ 标签拖拽
         
         # 初始化坐标系统
         self._setup_coordinate_system(*self.current_range)
@@ -248,19 +256,6 @@ class MatplotlibView:
             element_id = f"{element_type.value}_{id(text_obj)}"
             text_element_map[element_id] = text_obj
             
-            # 确定锚点
-            if element_type == ElementType.DEVICE_INFO and i < len(self.devices):
-                anchor_x = self.devices[i].x
-                anchor_y = self.devices[i].y
-            elif element_type == ElementType.MEASUREMENT_INFO and self.measurement_point:
-                anchor_x = self.measurement_point.x
-                anchor_y = self.measurement_point.y
-            elif element_type == ElementType.USER_POSITION and self.user_position:
-                anchor_x, anchor_y = self.user_position
-            else:
-                anchor_x = text_obj.get_position()[0]
-                anchor_y = text_obj.get_position()[1]
-            
             # 获取当前位置作为初始位置
             current_x, current_y = text_obj.get_position()
             
@@ -275,9 +270,38 @@ class MatplotlibView:
                 current_x + box_width/2, current_y + box_height/2
             )
             
-            # 创建元素
-            element = LayoutElement(element_type, bbox, (anchor_x, anchor_y), 
-                                  element_id=element_id, movable=True, static=False)
+            # === 设备标签特殊处理 ===
+            # 设备标签仅作为静态障碍物参与布局，不再被力导向算法移动，
+            # 以保证其遵循“左/上/右/下 + 1格”规则。
+            if element_type == ElementType.DEVICE_INFO:
+                element = LayoutElement(
+                    element_type,
+                    bbox,
+                    (current_x, current_y),  # 锚点对静态元素无实际影响
+                    element_id=element_id,
+                    movable=False,
+                    static=True
+                )
+            else:
+                # 非设备标签仍按原逻辑参与力导向布局
+                if element_type == ElementType.MEASUREMENT_INFO and self.measurement_point:
+                    anchor_x = self.measurement_point.x
+                    anchor_y = self.measurement_point.y
+                elif element_type == ElementType.USER_POSITION and self.user_position:
+                    anchor_x, anchor_y = self.user_position
+                else:
+                    anchor_x = current_x
+                    anchor_y = current_y
+                
+                element = LayoutElement(
+                    element_type,
+                    bbox,
+                    (anchor_x, anchor_y),
+                    element_id=element_id,
+                    movable=True,
+                    static=False
+                )
+            
             self.fast_layout_manager.add_element(element)
             
         # 3. 计算布局
@@ -285,6 +309,7 @@ class MatplotlibView:
         
         # 4. 更新文本位置
         for element in self.fast_layout_manager.elements:
+            # 只更新非静态元素的位置；设备标签（静态元素）保持原位
             if not element.static and element.element_id in text_element_map:
                 text_obj = text_element_map[element.element_id]
                 text_obj.set_position((element.current_x, element.current_y))
@@ -298,10 +323,17 @@ class MatplotlibView:
         for artist in self.sector_artists:
             if hasattr(artist, 'get_paths') or hasattr(artist, 'get_xy'):
                 self.obstacle_objects.append(artist)
+        # 仅对“非设备标签”使用adjustText，设备标签保持固定位置
+        target_texts = [
+            t for t in self.text_objects
+            if self._get_element_type_from_text(t) != ElementType.DEVICE_INFO
+        ]
+        if not target_texts:
+            return
         
         # 使用adjustText进行智能避让（减少参数，提升性能）
         adjust_text(
-            self.text_objects,
+            target_texts,
             ax=self.axes,
             add_objects=self.obstacle_objects if self.obstacle_objects else None,
             arrowprops=dict(
@@ -340,7 +372,7 @@ class MatplotlibView:
     
     def _on_mouse_click(self, event):
         """
-        处理鼠标点击事件
+        处理鼠标点击事件 ✨ 支持标签拖拽
         """
         if event.inaxes != self.axes:
             return
@@ -352,6 +384,13 @@ class MatplotlibView:
         current_time = time.time()
         
         if event.button == 1:  # 左键
+            # ✨ 首先检查是否点击了可拖拽的标签
+            clicked_label = self._find_label_at(x, y)
+            if clicked_label is not None:
+                # 开始拖拽标签
+                self._start_label_drag(clicked_label, x, y)
+                return
+            
             # 检查是否为双击
             if current_time - self.last_click_time < self.click_tolerance:
                 # 双击：绘制90度扇形
@@ -363,6 +402,12 @@ class MatplotlibView:
             self.last_click_time = current_time
             
         elif event.button == 3:  # 右键
+            # ✨ 检查是否右键点击了标签（重置到自动位置）
+            clicked_label = self._find_label_at(x, y)
+            if clicked_label is not None:
+                self._reset_label_to_auto(clicked_label)
+                return
+            
             # 清除所有测量点和扇形
             self._handle_right_click()
     
@@ -460,12 +505,15 @@ class MatplotlibView:
     
     def _on_mouse_move(self, event):
         """
-        处理鼠标移动事件 ✨ 交互体验优化
+        处理鼠标移动事件 ✨ 交互体验优化 + 标签拖拽
         """
         if event.inaxes != self.axes:
             self.mouse_pos = None
             self._clear_crosshair()
             self._clear_coordinate_info()
+            # ✨ 如果正在拖拽，离开axes时停止拖拽
+            if self._is_dragging:
+                self._end_label_drag()
             return
         
         x, y = event.xdata, event.ydata
@@ -474,6 +522,18 @@ class MatplotlibView:
             self._clear_crosshair()
             self._clear_coordinate_info()
             return
+        
+        # ✨ 如果正在拖拽标签，更新标签位置
+        if self._is_dragging and self._dragging_label is not None:
+            self._update_label_drag(x, y)
+            return
+        
+        # ✨ 检查是否悬停在标签上，改变光标
+        hovered_label = self._find_label_at(x, y)
+        if hovered_label is not None:
+            self._set_cursor('hand')
+        else:
+            self._set_cursor('arrow')
         
         # 检查是否在坐标范围内
         x_range, y_range = self.current_range
@@ -547,7 +607,15 @@ class MatplotlibView:
     
     def _draw_devices(self):
         """
-        绘制所有设备点（使用高性能原生布局算法）
+        绘制所有设备点（设备标签使用固定4方向规则：左/上/右/下）
+        
+        改进（V2.3）：
+        - 设备点使用5x5实心方块
+        - 添加短虚线引导线连接标签和设备点（线宽1px）
+        - 设备标签使用4方向规则（左、上、右、下），默认优先左侧
+          且“靠近设备一侧的标签边中点”与设备点在对应轴方向相距1个坐标单位
+        - 标签采用多行格式，字体加粗
+        - 支持设备自定义颜色
         """
         # 清除之前的设备图形
         self._clear_devices()
@@ -556,43 +624,51 @@ class MatplotlibView:
             self.canvas.draw_idle()
             return
 
-        # 提取坐标和名称
-        x_coords = [device.x for device in self.devices]
-        y_coords = [device.y for device in self.devices]
-
-        # 绘制设备点
-        scatter = self.axes.scatter(x_coords, y_coords, 
-                                  c=self.COLORS['device_point'], 
-                                  s=50, zorder=5, alpha=0.8,
-                                  edgecolors='white', linewidth=1)
-        self.device_artists.append(scatter)
-
-        # ✨ 使用高性能原生布局算法创建设备标签
+        # ✨ 使用高性能原生布局算法创建设备标签（12方向约束版）
         for device in self.devices:
-            label_text = f'{device.name}\n({device.x:.3f}, {device.y:.3f})'
+            # 获取设备颜色（如果有color属性则使用，否则使用默认红色）
+            device_color = getattr(device, 'color', self.COLORS['device_point'])
             
-            # 使用高性能布局管理器计算位置
-            if self.fast_layout_manager:
-                text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
-                    device.x, device.y, ElementType.DEVICE_INFO, f"device_{device.name}"
-                )
-            else:
-                # 回退到简单偏移
-                text_x = device.x + (1.0 if device.x < 0 else -1.0)
-                text_y = device.y + 0.8
+            # 绘制设备点：使用5x5正方形标记(marker='s')
+            point = self.axes.scatter([device.x], [device.y], 
+                                     c=device_color, 
+                                     s=25,  # 控制正方形大小，约为5x5像素效果
+                                     marker='s',  # 's'表示正方形
+                                     zorder=5, alpha=1.0,
+                                     edgecolors='white', linewidth=0.5)
+            self.device_artists.append(point)
             
-            # 创建文本对象
+            # ✨ 多行格式标签文本（设备名 + X坐标 + Y坐标）
+            label_text = f'{device.name}\nX: {device.x:.3f}\nY: {device.y:.3f}'
+            
+            # 使用固定4方向规则计算标签中心位置
+            text_x, text_y, _ = self._calculate_device_label_position_4dir(device.x, device.y)
+            
+            # ✨ 短虚线引导线连接设备点和标签（线宽1px，短虚线样式）
+            guide_line = self.axes.plot(
+                [device.x, text_x], [device.y, text_y],
+                color=device_color,
+                linewidth=1.0,  # 1像素线宽
+                linestyle=(0, (3, 2)),  # 短虚线样式：3px实线 + 2px空白
+                alpha=0.6,
+                zorder=4  # 在设备点和标签之下
+            )[0]
+            self.device_artists.append(guide_line)
+            
+            # ✨ 创建文本对象（加粗字体、多行格式）
             text = self.axes.text(
                 text_x, text_y,
                 label_text,
                 bbox=dict(
-                    boxstyle='round,pad=0.3', 
-                    facecolor='#ffffe0',  # 浅黄色背景 (对照HTML)
-                    edgecolor=self.COLORS['device_point'],
-                    alpha=0.9
+                    boxstyle='round,pad=0.4',  # 稍微增加内边距
+                    facecolor='#ffffe0',  # 浅黄色背景
+                    edgecolor=device_color,  # 使用设备颜色作为边框色
+                    linewidth=0.75,  # 边框线宽减半，避免过于抢眼
+                    alpha=0.95
                 ),
                 fontsize=9,
-                color=self.COLORS['device_point'],
+                fontweight='bold',  # ✨ 加粗字体
+                color=device_color,  # 使用设备颜色作为文字色
                 zorder=6,
                 ha='center', 
                 va='center'
@@ -601,10 +677,6 @@ class MatplotlibView:
             # 添加到艺术家列表和文本对象列表
             self.device_artists.append(text)
             self.text_objects.append(text)
-        
-        # 应用智能避让（仅在必要时）
-        if len(self.text_objects) > 0:
-            self._apply_smart_text_adjustment()
         
         # 更新显示
         self.canvas.draw_idle()
@@ -751,9 +823,9 @@ class MatplotlibView:
                                    linewidth=2, zorder=3)[0]
         self.sector_artists.append(sector_edge)
         
-        # 注册扇形区域到布局管理器（简化版本）
+        # 🆕 注册扇形斥力场到布局管理器（增强版V2.0）
         if self.fast_layout_manager:
-            # 计算扇形的近似边界框
+            # 计算扇形的近似边界框（用于元素碰撞检测）
             margin = 0.5
             sector_bbox = BoundingBox(
                 center_x - radius - margin,
@@ -768,6 +840,12 @@ class MatplotlibView:
                 priority=2, movable=False, element_id="sector", static=True
             )
             self.fast_layout_manager.add_element(sector_element)
+            
+            # 🆕 注册扇形斥力场（精确的扇形区域，用于标签避让）
+            self.fast_layout_manager.add_sector_region(
+                center_x, center_y, radius,
+                start_angle_deg, end_angle_deg
+            )
         
         # 更新显示
         self.canvas.draw_idle()
@@ -824,6 +902,8 @@ class MatplotlibView:
         # 清除布局管理器中的扇形元素
         if self.fast_layout_manager:
             self.fast_layout_manager.remove_element_by_type(ElementType.SECTOR)
+            # 🆕 清除扇形斥力场
+            self.fast_layout_manager.clear_sector_regions()
     
     def set_coordinate_range(self, x_range: float, y_range: float):
         """
@@ -979,6 +1059,83 @@ class MatplotlibView:
     def get_current_range(self) -> Tuple[float, float]:
         """获取当前坐标范围"""
         return self.current_range
+
+    # === 设备标签4方向默认布局规则 ===
+    
+    def _calculate_device_label_position_4dir(self, anchor_x: float, anchor_y: float) -> Tuple[float, float, str]:
+        """
+        计算设备标签的默认位置（4方向规则）
+        
+        规则说明（以设备点 (anchor_x, anchor_y) 为参考）：
+        - 左侧：标签矩形“右边缘中点”的坐标为 (anchor_x - 1, anchor_y)
+        - 上侧：标签矩形“下边缘中点”的坐标为 (anchor_x, anchor_y + 1)
+        - 右侧：标签矩形“左边缘中点”的坐标为 (anchor_x + 1, anchor_y)
+        - 下侧：标签矩形“上边缘中点”的坐标为 (anchor_x, anchor_y - 1)
+        
+        即标签靠近设备一侧的边中点与设备点在对应轴方向相距1个坐标单位。
+        方向优先级：左 -> 上 -> 右 -> 下，只在越界时才尝试下一方向。
+        """
+        # 获取标签尺寸：优先使用布局管理器中的配置
+        if self.fast_layout_manager:
+            label_width, label_height = self.fast_layout_manager.info_box_sizes.get(
+                ElementType.DEVICE_INFO, (2.0, 1.2)
+            )
+        else:
+            label_width, label_height = (2.0, 1.2)
+        
+        # 当前坐标范围（对称: ±x_range, ±y_range）
+        x_range, y_range = self.current_range
+        
+        # 四个候选中心位置（左/上/右/下）
+        candidates = [
+            # 左侧：标签右边缘中点 (anchor_x - 1, anchor_y)
+            (
+                'left',
+                anchor_x - 1.0 - label_width / 2.0,
+                anchor_y
+            ),
+            # 上侧：标签下边缘中点 (anchor_x, anchor_y + 1)
+            (
+                'top',
+                anchor_x,
+                anchor_y + 1.0 + label_height / 2.0
+            ),
+            # 右侧：标签左边缘中点 (anchor_x + 1, anchor_y)
+            (
+                'right',
+                anchor_x + 1.0 + label_width / 2.0,
+                anchor_y
+            ),
+            # 下侧：标签上边缘中点 (anchor_x, anchor_y - 1)
+            (
+                'bottom',
+                anchor_x,
+                anchor_y - 1.0 - label_height / 2.0
+            ),
+        ]
+        
+        # 内部函数：检查候选中心是否在画布范围内（留0.5单位安全边距）
+        def _within_bounds(cx: float, cy: float) -> bool:
+            left = cx - label_width / 2.0
+            right = cx + label_width / 2.0
+            top = cy + label_height / 2.0
+            bottom = cy - label_height / 2.0
+            margin = 0.5
+            return (
+                left >= -x_range + margin and
+                right <= x_range - margin and
+                bottom >= -y_range + margin and
+                top <= y_range - margin
+            )
+        
+        # 按优先级依次尝试候选位置
+        for direction, cx, cy in candidates:
+            if _within_bounds(cx, cy):
+                return cx, cy, direction
+        
+        # 如果所有方向都越界，则退回到左侧候选（即便可能超出边界）
+        direction, cx, cy = candidates[0]
+        return cx, cy, direction
 
     # === 用户坐标系功能 ✨ 双坐标系核心功能 ===
     
@@ -1386,4 +1543,269 @@ class MatplotlibView:
             except (ValueError, AttributeError):
                 pass  # 如果对象已被移除或无效，忽略错误
         self.coordinate_info_artists.clear()
-        self.canvas.draw_idle() 
+        self.canvas.draw_idle()
+    
+    # ==================== 标签拖拽功能 ✨ ====================
+    
+    def _on_mouse_release(self, event):
+        """
+        处理鼠标释放事件 - 结束标签拖拽
+        """
+        if self._is_dragging:
+            self._end_label_drag()
+    
+    def _find_label_at(self, x: float, y: float) -> Optional[any]:
+        """
+        查找指定坐标位置的标签
+        
+        Args:
+            x: 鼠标X坐标
+            y: 鼠标Y坐标
+            
+        Returns:
+            找到的标签对象，如果没有则返回None
+        """
+        # 遍历所有文本对象，检查是否包含该点
+        for text_obj in self.text_objects:
+            try:
+                # 获取文本的边界框（数据坐标）
+                bbox = text_obj.get_window_extent(self.canvas.get_renderer())
+                # 转换为数据坐标
+                bbox_data = bbox.transformed(self.axes.transData.inverted())
+                
+                # 检查点是否在边界框内
+                if (bbox_data.x0 <= x <= bbox_data.x1 and 
+                    bbox_data.y0 <= y <= bbox_data.y1):
+                    return text_obj
+            except Exception as e:
+                # 如果获取边界框失败，跳过该对象
+                continue
+        
+        return None
+    
+    def _start_label_drag(self, label: any, x: float, y: float):
+        """
+        开始拖拽标签
+        
+        Args:
+            label: 要拖拽的标签对象
+            x: 起始X坐标
+            y: 起始Y坐标
+        """
+        self._dragging_label = label
+        self._drag_start_pos = (x, y)
+        self._label_original_pos = label.get_position()
+        self._is_dragging = True
+        
+        # 改变光标为移动光标
+        self._set_cursor('fleur')
+        
+        # 高亮显示正在拖拽的标签
+        label.set_bbox(dict(
+            boxstyle='round,pad=0.3',
+            facecolor='#e3f2fd',  # 浅蓝色高亮
+            edgecolor='#1976d2',  # 蓝色边框
+            alpha=0.95,
+            linewidth=2
+        ))
+        
+        self.canvas.draw_idle()
+        print(f"🎯 开始拖拽标签: {label.get_text()[:20]}...")
+    
+    def _update_label_drag(self, x: float, y: float):
+        """
+        更新拖拽中的标签位置
+        
+        Args:
+            x: 当前鼠标X坐标
+            y: 当前鼠标Y坐标
+        """
+        if not self._is_dragging or self._dragging_label is None:
+            return
+        
+        # 计算偏移量
+        dx = x - self._drag_start_pos[0]
+        dy = y - self._drag_start_pos[1]
+        
+        # 计算新位置
+        new_x = self._label_original_pos[0] + dx
+        new_y = self._label_original_pos[1] + dy
+        
+        # 限制在坐标范围内
+        x_range, y_range = self.current_range
+        margin = 0.5
+        new_x = max(-x_range + margin, min(new_x, x_range - margin))
+        new_y = max(-y_range + margin, min(new_y, y_range - margin))
+        
+        # 更新标签位置
+        self._dragging_label.set_position((new_x, new_y))
+        
+        # 更新引导线（如果有）
+        self._update_guide_line_for_label(self._dragging_label, new_x, new_y)
+        
+        self.canvas.draw_idle()
+    
+    def _update_guide_line_for_label(self, label: any, new_x: float, new_y: float):
+        """
+        更新标签对应的引导线
+        
+        Args:
+            label: 标签对象
+            new_x: 标签新X坐标
+            new_y: 标签新Y坐标
+        """
+        # 查找与此标签关联的设备
+        label_text = label.get_text()
+        
+        for i, device in enumerate(self.devices):
+            if device.name in label_text:
+                # 找到对应的引导线并更新
+                # 引导线在device_artists中，紧跟在scatter点之后
+                guide_line_idx = i * 3 + 1  # scatter点、引导线、text
+                if guide_line_idx < len(self.device_artists):
+                    guide_line = self.device_artists[guide_line_idx]
+                    if hasattr(guide_line, 'set_data'):
+                        guide_line.set_data([device.x, new_x], [device.y, new_y])
+                break
+    
+    def _end_label_drag(self):
+        """
+        结束标签拖拽
+        """
+        if not self._is_dragging or self._dragging_label is None:
+            return
+        
+        # 恢复标签样式
+        label_text = self._dragging_label.get_text()
+        
+        # 根据标签类型恢复样式，但使用蓝色边框标识手动位置
+        if '[用户]' in label_text:
+            # 用户位置标签
+            self._dragging_label.set_bbox(dict(
+                boxstyle="round,pad=0.5",
+                facecolor='#f8f4ff',
+                edgecolor='#1565c0',  # 蓝色边框表示手动位置
+                linewidth=2.5,
+                alpha=0.95
+            ))
+        elif '距离:' in label_text and '角度:' in label_text:
+            # 测量信息标签
+            self._dragging_label.set_bbox(dict(
+                boxstyle='round,pad=0.5',
+                facecolor=self.COLORS['label_bg'],
+                edgecolor='#1565c0',  # 蓝色边框表示手动位置
+                alpha=0.9
+            ))
+        else:
+            # 设备标签
+            self._dragging_label.set_bbox(dict(
+                boxstyle='round,pad=0.3',
+                facecolor='#ffffe0',
+                edgecolor='#1565c0',  # 蓝色边框表示手动位置
+                alpha=0.9
+            ))
+        
+        # 获取最终位置
+        final_pos = self._dragging_label.get_position()
+        print(f"✅ 标签拖拽完成: 新位置 ({final_pos[0]:.2f}, {final_pos[1]:.2f})")
+        
+        # 恢复光标
+        self._set_cursor('arrow')
+        
+        # 清理状态
+        self._dragging_label = None
+        self._drag_start_pos = None
+        self._label_original_pos = None
+        self._is_dragging = False
+        
+        self.canvas.draw_idle()
+    
+    def _reset_label_to_auto(self, label: any):
+        """
+        重置标签到自动计算的位置
+        
+        Args:
+            label: 要重置的标签对象
+        """
+        label_text = label.get_text()
+        print(f"🔄 重置标签位置: {label_text[:20]}...")
+        
+        auto_x, auto_y = None, None
+        
+        # 设备标签：使用4方向规则重新计算默认位置
+        device_anchor = None
+        for device in self.devices:
+            if device.name in label_text:
+                device_anchor = (device.x, device.y, device)
+                break
+        
+        if device_anchor is not None:
+            anchor_x, anchor_y, device = device_anchor
+            auto_x, auto_y, _ = self._calculate_device_label_position_4dir(anchor_x, anchor_y)
+        elif '[用户]' in label_text and self.user_position:
+            # 用户位置标签：仍然使用高性能布局算法
+            anchor_x, anchor_y = self.user_position
+            if self.fast_layout_manager:
+                auto_x, auto_y = self.fast_layout_manager.calculate_optimal_position(
+                    anchor_x, anchor_y, ElementType.USER_POSITION, "user_position"
+                )
+        elif '距离:' in label_text and self.measurement_point:
+            # 测量信息标签：仍然使用高性能布局算法
+            anchor_x, anchor_y = self.measurement_point.x, self.measurement_point.y
+            if self.fast_layout_manager:
+                auto_x, auto_y = self.fast_layout_manager.calculate_optimal_position(
+                    anchor_x, anchor_y, ElementType.MEASUREMENT_INFO, "measurement"
+                )
+        
+        # 应用自动位置并更新引导线
+        if auto_x is not None and auto_y is not None:
+            label.set_position((auto_x, auto_y))
+            self._update_guide_line_for_label(label, auto_x, auto_y)
+        
+        # 恢复原始样式（移除蓝色边框）
+        if '[用户]' in label_text:
+            label.set_bbox(dict(
+                boxstyle="round,pad=0.5",
+                facecolor='#f8f4ff',
+                edgecolor=self.COLORS['user_marker'],
+                linewidth=2.5,
+                alpha=0.95
+            ))
+        elif '距离:' in label_text:
+            label.set_bbox(dict(
+                boxstyle='round,pad=0.5',
+                facecolor=self.COLORS['label_bg'],
+                edgecolor=self.COLORS['label_border'],
+                alpha=0.9
+            ))
+        else:
+            label.set_bbox(dict(
+                boxstyle='round,pad=0.3',
+                facecolor='#ffffe0',
+                edgecolor=self.COLORS['device_point'],
+                alpha=0.9
+            ))
+        
+        self.canvas.draw_idle()
+        print(f"✅ 标签已重置到自动位置")
+    
+    def _set_cursor(self, cursor_type: str):
+        """
+        设置鼠标光标样式
+        
+        Args:
+            cursor_type: 光标类型 ('arrow', 'hand', 'fleur', 'crosshair')
+        """
+        cursor_map = {
+            'arrow': '',      # 默认箭头
+            'hand': 'hand2',  # 手形光标
+            'fleur': 'fleur', # 移动光标（十字箭头）
+            'crosshair': 'crosshair'  # 十字准星
+        }
+        
+        cursor_name = cursor_map.get(cursor_type, '')
+        
+        try:
+            self.canvas.get_tk_widget().config(cursor=cursor_name)
+        except Exception:
+            pass  # 如果设置光标失败，忽略 
