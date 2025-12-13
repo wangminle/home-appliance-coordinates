@@ -61,8 +61,8 @@ class MatplotlibView:
         'sector_edge': '#d32f2f',     # 红色扇形边缘 (对照HTML)
         'crosshair': (0.0, 0.0, 0.0, 0.5),  # 十字光标颜色
         # 用户坐标系配色 ✨ 双坐标系功能 - 视觉优化增强版
-        'user_grid': (0.400, 0.050, 0.600, 0.7),    # 更深的紫色网格，提升对比度
-        'user_axis': (0.300, 0.000, 0.500, 0.9),    # 深紫色虚线坐标轴，增强显示
+        'user_grid': (211/255, 47/255, 47/255, 0.5),  # 红色网格，与用户坐标轴保持一致
+        'user_axis': '#d32f2f',                     # 红色虚线坐标轴（按需求调整）
         'user_marker': '#5e35b1',     # 更醒目的深紫色用户位置标记
         'user_text': '#4a148c',       # 深紫色文字
     }
@@ -143,7 +143,11 @@ class MatplotlibView:
         
         # 创建Tkinter Canvas
         self.canvas = FigureCanvasTkAgg(self.figure, self.parent_frame)
-        self.canvas.get_tk_widget().pack(fill=tk.BOTH, expand=True)
+        tk_widget = self.canvas.get_tk_widget()
+        tk_widget.pack(fill=tk.BOTH, expand=True)
+        
+        # ✨ 禁止canvas抢占焦点，解决与Tkinter Entry组件的焦点冲突问题
+        tk_widget.configure(takefocus=0)
         
         # 绑定事件
         self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
@@ -203,9 +207,7 @@ class MatplotlibView:
         # 设置相等的宽高比
         self.axes.set_aspect('equal', adjustable='box')
         
-        # 绘制原点
-        self.axes.plot(0, 0, 'o', color=self.COLORS['origin_point'], 
-                      markersize=8, zorder=4, label='原点')
+        # 说明：原点的“大蓝点”已移除（用户反馈：原始坐标系无需额外强调原点）
         
         print(f"✅ 坐标系统设置完成: ±{x_range} x ±{y_range}")
     
@@ -270,10 +272,11 @@ class MatplotlibView:
                 current_x + box_width/2, current_y + box_height/2
             )
             
-            # === 设备标签特殊处理 ===
-            # 设备标签仅作为静态障碍物参与布局，不再被力导向算法移动，
-            # 以保证其遵循“左/上/右/下 + 1格”规则。
-            if element_type == ElementType.DEVICE_INFO:
+            # === 固定标签特殊处理 ===
+            # 1) 设备标签：仅作为静态障碍物参与布局，不再被力导向算法移动，
+            #    以保证其遵循“左/上/右/下 + 1格”规则。
+            # 2) 测量标签：用户要求默认固定在“单击点正下方下移2格”，因此同样固定不移动。
+            if element_type in (ElementType.DEVICE_INFO, ElementType.MEASUREMENT_INFO):
                 element = LayoutElement(
                     element_type,
                     bbox,
@@ -323,10 +326,10 @@ class MatplotlibView:
         for artist in self.sector_artists:
             if hasattr(artist, 'get_paths') or hasattr(artist, 'get_xy'):
                 self.obstacle_objects.append(artist)
-        # 仅对“非设备标签”使用adjustText，设备标签保持固定位置
+        # 仅对“非固定标签”使用adjustText（设备标签、测量标签保持固定位置）
         target_texts = [
             t for t in self.text_objects
-            if self._get_element_type_from_text(t) != ElementType.DEVICE_INFO
+            if self._get_element_type_from_text(t) not in (ElementType.DEVICE_INFO, ElementType.MEASUREMENT_INFO)
         ]
         if not target_texts:
             return
@@ -351,17 +354,31 @@ class MatplotlibView:
         )
     
     def _get_element_type_from_text(self, text_obj) -> ElementType:
-        """从文本对象推断元素类型"""
+        """从文本对象推断元素类型
+        
+        检测顺序很重要：
+        1. 测量标签优先（包含"距离:"和"角度:"），因为它也可能包含"[世界坐标系]"/"[用户坐标系]"
+        2. 用户原点标签（以"[用户] 位置"开头）
+        3. 坐标信息框（包含"[世界]"或"[用户]"但不是测量标签）
+        4. 其他默认为设备标签
+        """
         text_content = text_obj.get_text()
         
-        if '[用户]' in text_content:
-            return ElementType.USER_POSITION
-        elif '[世界]' in text_content or '[用户]' in text_content:
-            return ElementType.COORDINATE_INFO
-        elif '距离:' in text_content and '角度:' in text_content:
+        # 1. 测量标签优先检测（包含"距离:"和"角度:"）
+        #    测量标签格式: "[世界坐标系]\n距离: ...\n角度: ..." 或 "[用户坐标系]\n..."
+        if '距离:' in text_content and '角度:' in text_content:
             return ElementType.MEASUREMENT_INFO
-        else:
-            return ElementType.DEVICE_INFO
+        
+        # 2. 用户原点标签（固定文本格式: "[用户] 位置\n(...)"）
+        if text_content.startswith('[用户] 位置'):
+            return ElementType.USER_POSITION
+        
+        # 3. 坐标信息框（包含"[世界]"或"[用户]"但不是上述类型）
+        if '[世界]' in text_content or '[用户]' in text_content:
+            return ElementType.COORDINATE_INFO
+        
+        # 4. 其他默认为设备标签
+        return ElementType.DEVICE_INFO
     
     def _clear_text_objects(self):
         """清空文本对象列表"""
@@ -543,7 +560,8 @@ class MatplotlibView:
             if not self.mouse_pos or (abs(x - self.mouse_pos[0]) > threshold or abs(y - self.mouse_pos[1]) > threshold):
                 self.mouse_pos = (x, y)
                 self._draw_crosshair()
-                self._draw_coordinate_info(x, y)  # ✨ 第五步新增功能
+                # 移除“随光标出现的坐标信息框”（世界/用户坐标系都不再显示）
+                self._clear_coordinate_info()
                 
                 # 统一重绘（批量处理，提升性能）✨ 性能优化
                 self.canvas.draw_idle()
@@ -629,10 +647,10 @@ class MatplotlibView:
             # 获取设备颜色（如果有color属性则使用，否则使用默认红色）
             device_color = getattr(device, 'color', self.COLORS['device_point'])
             
-            # 绘制设备点：使用5x5正方形标记(marker='s')
+            # 绘制设备点：使用7x7正方形标记(marker='s')
             point = self.axes.scatter([device.x], [device.y], 
                                      c=device_color, 
-                                     s=25,  # 控制正方形大小，约为5x5像素效果
+                                     s=49,  # 控制正方形大小，约为7x7像素效果
                                      marker='s',  # 's'表示正方形
                                      zorder=5, alpha=1.0,
                                      edgecolors='white', linewidth=0.5)
@@ -693,10 +711,10 @@ class MatplotlibView:
         
         x, y = self.measurement_point.x, self.measurement_point.y
         
-        # 绘制测量点 - 修复：使用正确的颜色和大小
+        # 绘制测量点：直径约为6的圆点（Matplotlib中markersize为“直径（points）”）
         point = self.axes.plot(x, y, 'o', 
                              color=self.COLORS['measurement_point'], 
-                             markersize=8, zorder=7)[0]
+                             markersize=6, zorder=7)[0]
         self.measurement_artists.append(point)
         
         # 根据坐标系模式绘制不同的连线 ✨ 动态交互模式
@@ -726,15 +744,16 @@ class MatplotlibView:
         # 添加坐标系模式标识到信息中
         info_text = f"[{coord_mode}]\n" + '\n'.join(info_lines)
         
-        # ✨ 使用高性能布局管理器计算位置
-        if self.fast_layout_manager:
-            text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
-                x, y, ElementType.MEASUREMENT_INFO, "measurement"
-            )
-        else:
-            # 回退到简单偏移
-            text_x = x + 1.0
-            text_y = y + 1.0
+        # 坐标标签默认位置：在单击标记点正下方，下移2格（2个坐标单位）
+        # 说明：此处采用“默认固定位置 + 轻量边界约束”，不再做自动避让，以符合交互预期
+        text_x = x
+        text_y = y - 2.0
+        
+        # 边界约束：避免标签超出画布（留0.5单位安全边距）
+        x_range, y_range = self.current_range
+        margin = 0.5
+        text_x = max(-x_range + margin, min(text_x, x_range - margin))
+        text_y = max(-y_range + margin, min(text_y, y_range - margin))
         
         # 创建测量信息框
         text = self.axes.text(
@@ -742,11 +761,14 @@ class MatplotlibView:
             info_text,
             bbox=dict(
                 boxstyle='round,pad=0.5', 
-                facecolor=self.COLORS['label_bg'], 
+                # 标签底色：透明度60%（覆盖度0.6）
+                facecolor=(1.0, 1.0, 1.0, 0.6),
                 edgecolor=self.COLORS['label_border'],
-                alpha=0.9
+                linewidth=1.5
             ),
+            # 字体/字号：与设备标签说明文字一致
             fontsize=9,
+            fontweight='bold',
             color=self.COLORS['text_color'],
             zorder=8,
             ha='center', 
@@ -1281,24 +1303,20 @@ class MatplotlibView:
                                         linewidth=2, zorder=16, alpha=1.0)
         self.user_position_artists.append(person_marker)
         
-        # ✨ 添加用户位置文字标签 (使用高性能布局管理器)
+        # 用户坐标系“原点标签”：固定显示在用户坐标点正下方2格（不随动）
+        # 说明：
+        # - “不随动”包含：不参与智能避让/自动布局，不做边界挪动
+        # - 位置严格采用 (x, y-2.0)，以满足需求“正下方2格”
         label_text = f'[用户] 位置\n({x:.1f}, {y:.1f})'
-        
-        # 使用高性能布局管理器计算位置
-        if self.fast_layout_manager:
-            text_x, text_y = self.fast_layout_manager.calculate_optimal_position(
-                x, y, ElementType.USER_POSITION, "user_position"
-            )
-        else:
-            # 回退到简单偏移
-            text_x = x + 1.2
-            text_y = y + 0.8
+        text_x = x
+        text_y = y - 2.0
         
         # 创建文本对象
         text = self.axes.text(
             text_x, text_y,
             label_text, 
-            fontsize=12, 
+            # 字体/字号：与设备标签说明文字一致
+            fontsize=9, 
             fontweight='bold',
             color=self.COLORS['user_text'],
             ha='center', 
@@ -1306,25 +1324,22 @@ class MatplotlibView:
             zorder=17,
             bbox=dict(
                 boxstyle="round,pad=0.5",
-                facecolor='#f8f4ff',  # 浅紫色背景
-                edgecolor=self.COLORS['user_marker'],
-                linewidth=2.5,
-                alpha=0.95
+                # 背景：60%透明度
+                facecolor=(1.0, 1.0, 1.0, 0.6),
+                edgecolor=self.COLORS['user_axis'],
+                linewidth=1.5
             )
         )
         
-        # 添加到艺术家列表和文本对象列表
+        # 添加到艺术家列表
         self.user_position_artists.append(text)
-        self.text_objects.append(text)
-        
-        # 应用智能避让（重新处理所有文本）
-        if len(self.text_objects) > 0:
-            self._apply_smart_text_adjustment()
+        # 注意：用户原点标签不加入 self.text_objects，也不参与智能避让，
+        # 否则会导致位置“随动/漂移”，违背“固定在正下方2格”的需求
         
         print(f"✨ 绘制用户位置标记: ({x:.3f}, {y:.3f})")
     
     def _draw_user_coordinate_axes(self):
-        """绘制用户坐标系轴线（精致的紫色虚线）"""
+        """绘制用户坐标系轴线（红色虚线）"""
         if not self.user_position:
             return
         
@@ -1332,17 +1347,17 @@ class MatplotlibView:
         x_range, y_range = self.current_range
         
         # 绘制用户坐标系的精致虚线轴
-        # 主轴线（较粗）
+        # 主轴线（线宽下降一半）
         h_line_main = self.axes.axhline(y=y, color=self.COLORS['user_axis'], 
-                                      linewidth=3, linestyle='--', alpha=0.8, zorder=6)
+                                      linewidth=0.75, linestyle='--', alpha=0.85, zorder=6)
         v_line_main = self.axes.axvline(x=x, color=self.COLORS['user_axis'], 
-                                      linewidth=3, linestyle='--', alpha=0.8, zorder=6)
+                                      linewidth=0.75, linestyle='--', alpha=0.85, zorder=6)
         
-        # 辅助轴线（较细，增强视觉效果）
-        h_line_aux = self.axes.axhline(y=y, color='white', 
-                                     linewidth=1, linestyle='--', alpha=0.6, zorder=5)
-        v_line_aux = self.axes.axvline(x=x, color='white', 
-                                     linewidth=1, linestyle='--', alpha=0.6, zorder=5)
+        # 辅助轴线（线宽下降一半，浅红色增强层次）
+        h_line_aux = self.axes.axhline(y=y, color=self.COLORS['user_axis'], 
+                                     linewidth=0.25, linestyle='--', alpha=0.35, zorder=5)
+        v_line_aux = self.axes.axvline(x=x, color=self.COLORS['user_axis'], 
+                                     linewidth=0.25, linestyle='--', alpha=0.35, zorder=5)
         
         self.user_position_artists.extend([h_line_main, v_line_main, h_line_aux, v_line_aux])
         
@@ -1352,7 +1367,7 @@ class MatplotlibView:
             x_arrow = self.axes.annotate('', xy=(x + 0.8, y), xytext=(x + 0.2, y),
                                        arrowprops=dict(arrowstyle='->', 
                                                      color=self.COLORS['user_axis'],
-                                                     lw=2, alpha=0.7),
+                                                     lw=1, alpha=0.7),
                                        zorder=7)
             self.user_position_artists.append(x_arrow)
         
@@ -1361,7 +1376,7 @@ class MatplotlibView:
             y_arrow = self.axes.annotate('', xy=(x, y + 0.8), xytext=(x, y + 0.2),
                                        arrowprops=dict(arrowstyle='->', 
                                                      color=self.COLORS['user_axis'],
-                                                     lw=2, alpha=0.7),
+                                                     lw=1, alpha=0.7),
                                        zorder=7)
             self.user_position_artists.append(y_arrow)
         
@@ -1423,114 +1438,10 @@ class MatplotlibView:
             x: 当前鼠标X坐标
             y: 当前鼠标Y坐标
         """
-        # 清除之前的坐标信息
+        # 交互调整：不再显示任何“随动坐标信息框”（世界/用户坐标系都关闭）
+        # 清除可能残留的对象
         self._clear_coordinate_info()
-        
-        # 构建坐标信息文本 ✨ 性能优化：避免重复绘制相同内容
-        if self.user_coord_enabled and self.user_position:
-            # 双坐标系模式：显示世界坐标和用户相对坐标
-            ux, uy = self.user_position
-            rel_x, rel_y = x - ux, y - uy
-            rel_distance = math.sqrt(rel_x**2 + rel_y**2)
-            
-            info_text = (
-                f"[世界] 坐标: ({x:.2f}, {y:.2f})\n"
-                f"[用户] 坐标: ({rel_x:.2f}, {rel_y:.2f})\n"
-                f"[距离] 到用户: {rel_distance:.2f}\n"
-                f"[角度] 用户方向: {math.degrees(math.atan2(rel_y, rel_x)):.1f}°"
-            )
-            text_color = '#4a148c'  # 深紫色（增强对比）
-            bg_color = '#f8f4ff'    # 更浅的紫色背景
-        else:
-            # 世界坐标系模式：仅显示世界坐标
-            distance = math.sqrt(x**2 + y**2)
-            angle = math.degrees(math.atan2(y, x))
-            info_text = (
-                f"[世界] 坐标: ({x:.2f}, {y:.2f})\n"
-                f"[距离] 到原点: {distance:.2f}\n"
-                f"[角度] 原点方向: {angle:.1f}°"
-            )
-            text_color = '#1565c0'  # 深蓝色（增强对比）
-            bg_color = '#f0f8ff'    # 更浅的蓝色背景
-        
-        # 检查内容是否改变，避免重复绘制 ✨ 性能优化
-        if info_text == self._last_coordinate_info_text:
-            return  # 内容没有变化，跳过重绘
-        
-        self._last_coordinate_info_text = info_text
-        
-        # 使用智能布局管理器计算信息框位置
-        if self.fast_layout_manager:
-            # 先移除之前的坐标信息元素，避免累积
-            self.fast_layout_manager.remove_element_by_type(ElementType.COORDINATE_INFO)
-            
-            # 计算首选偏移位置（四象限适应性定位）
-            x_range, y_range = self.current_range
-            preferred_offset_x = -2.0 if x > x_range * 0.6 else 0.8
-            preferred_offset_y = -1.5 if y > y_range * 0.6 else 0.8
-            preferred_offset = (preferred_offset_x, preferred_offset_y)
-            
-            info_x, info_y = self.fast_layout_manager.calculate_optimal_position(
-                x, y, ElementType.COORDINATE_INFO, "coordinate_info", preferred_offset
-            )
-            
-            # 注册元素到布局管理器（临时元素，优先级较低）
-            box_width, box_height = 2.8, 1.5  # 坐标信息框尺寸
-            coordinate_bbox = BoundingBox(
-                info_x - box_width/2, info_y - box_height/2,
-                info_x + box_width/2, info_y + box_height/2
-            )
-            coordinate_element = LayoutElement(
-                ElementType.COORDINATE_INFO, coordinate_bbox, (x, y),
-                priority=3, movable=True, element_id="coordinate_info"
-            )
-            self.fast_layout_manager.add_element(coordinate_element)
-        else:
-            # 回退到原始计算方法
-            x_range, y_range = self.current_range
-            
-            # 根据鼠标位置选择最佳信息框位置，避免遮挡和超界
-            if x > x_range * 0.6:  # 鼠标在右侧
-                info_x = x - 2.0  # 信息框显示在左侧
-            else:  # 鼠标在左侧
-                info_x = x + 0.8  # 信息框显示在右侧
-            
-            if y > y_range * 0.6:  # 鼠标在上方
-                info_y = y - 1.5  # 信息框显示在下方
-            else:  # 鼠标在下方
-                info_y = y + 0.8  # 信息框显示在上方
-            
-            # 确保信息框不超出坐标范围
-            info_x = max(-x_range + 0.5, min(info_x, x_range - 2.5))
-            info_y = max(-y_range + 0.5, min(info_y, y_range - 1.5))
-        
-        # 绘制坐标信息框 ✨ 第五步视觉优化
-        annotation = self.axes.annotate(
-            info_text,
-            xy=(x, y),
-            xytext=(info_x, info_y),
-            bbox=dict(
-                boxstyle='round,pad=0.6',  # 增大内边距
-                facecolor=bg_color,
-                edgecolor=text_color,
-                linewidth=2,  # 增强边框
-                alpha=0.95   # 提高不透明度，移除不兼容的shadow参数
-            ),
-            fontsize=10,    # 增大字体
-            fontweight='bold',  # 加粗字体
-            color=text_color,
-            zorder=15,  # 最高层级，确保可见
-            ha='left',
-            arrowprops=dict(
-                arrowstyle='->',
-                color=text_color,
-                alpha=0.7,
-                lw=1.5
-            )
-        )
-        self.coordinate_info_artists.append(annotation)
-        
-        # 注意：不在这里调用draw_idle()，由调用者统一控制重绘时机 ✨ 性能优化
+        return
     
     def _clear_coordinate_info(self):
         """

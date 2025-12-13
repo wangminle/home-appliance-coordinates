@@ -109,7 +109,7 @@ class InputPanel:
             widget.destroy()
         
         # 创建主滚动框架
-        main_canvas = tk.Canvas(
+        self.main_canvas = tk.Canvas(
             self.parent_frame,
             bg=self.COLORS['bg'],
             highlightthickness=0
@@ -117,19 +117,30 @@ class InputPanel:
         scrollbar = ttk.Scrollbar(
             self.parent_frame,
             orient="vertical",
-            command=main_canvas.yview
+            command=self.main_canvas.yview
         )
-        scrollable_frame = ttk.Frame(main_canvas)
+        scrollable_frame = ttk.Frame(self.main_canvas)
         
         scrollable_frame.bind(
             "<Configure>",
-            lambda e: main_canvas.configure(scrollregion=main_canvas.bbox("all"))
+            lambda e: self.main_canvas.configure(scrollregion=self.main_canvas.bbox("all"))
         )
         
-        main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
-        main_canvas.configure(yscrollcommand=scrollbar.set)
+        self.main_canvas.create_window((0, 0), window=scrollable_frame, anchor="nw")
+        self.main_canvas.configure(yscrollcommand=scrollbar.set)
         
-        main_canvas.pack(side="left", fill="both", expand=True)
+        # ✨ 修复Canvas内嵌组件焦点问题：当点击Canvas内的组件时，将焦点传递给被点击的组件
+        def _on_canvas_click(event):
+            """处理Canvas点击事件，将焦点传递给被点击的内部组件"""
+            # 获取点击位置对应的实际组件
+            widget = event.widget.winfo_containing(event.x_root, event.y_root)
+            if widget and widget != event.widget:
+                # 如果点击的是内部组件（不是Canvas本身），将焦点传递给它
+                widget.focus_set()
+        
+        self.main_canvas.bind('<Button-1>', _on_canvas_click)
+        
+        self.main_canvas.pack(side="left", fill="both", expand=True)
         scrollbar.pack(side="right", fill="y")
         
         # 在滚动框架中创建内容
@@ -183,6 +194,8 @@ class InputPanel:
             justify='center'
         )
         x_entry.pack(side='left', padx=(5, 0))
+        # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
+        x_entry.bind('<Button-1>', lambda e, w=x_entry: w.focus_set())
         
         # Y轴范围设置行
         y_frame = ttk.Frame(range_frame)
@@ -213,6 +226,8 @@ class InputPanel:
             justify='center'
         )
         y_entry.pack(side='left', padx=(5, 0))
+        # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
+        y_entry.bind('<Button-1>', lambda e, w=y_entry: w.focus_set())
         
         # 应用设置按钮（右侧，与下方"设置用户位置"按钮左边缘对齐）
         apply_btn = ttk.Button(
@@ -391,15 +406,21 @@ class InputPanel:
         ttk.Label(input_frame, text="名称:", width=8).grid(row=0, column=0, sticky='w', pady=2)
         self.name_entry = ttk.Entry(input_frame, textvariable=self.device_name_var)
         self.name_entry.grid(row=0, column=1, sticky='ew', pady=2)
+        # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
+        self.name_entry.bind('<Button-1>', lambda e: self.name_entry.focus_set())
         
         # Coordinates
         ttk.Label(input_frame, text="X坐标:", width=8).grid(row=1, column=0, sticky='w', pady=2)
         self.x_entry = ttk.Entry(input_frame, textvariable=self.device_x_var)
         self.x_entry.grid(row=1, column=1, sticky='ew', pady=2)
+        # ✨ 绑定点击事件确保获取焦点
+        self.x_entry.bind('<Button-1>', lambda e: self.x_entry.focus_set())
         
         ttk.Label(input_frame, text="Y坐标:", width=8).grid(row=2, column=0, sticky='w', pady=2)
         self.y_entry = ttk.Entry(input_frame, textvariable=self.device_y_var)
         self.y_entry.grid(row=2, column=1, sticky='ew', pady=2)
+        # ✨ 绑定点击事件确保获取焦点
+        self.y_entry.bind('<Button-1>', lambda e: self.y_entry.focus_set())
         
         # ✨ 新增颜色选择下拉框
         ttk.Label(input_frame, text="颜色:", width=8).grid(row=3, column=0, sticky='w', pady=2)

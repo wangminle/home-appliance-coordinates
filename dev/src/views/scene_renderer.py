@@ -62,8 +62,9 @@ class SceneRenderer:
         'sector_edge': '#d32f2f',       # 红色扇形边缘
         'crosshair': (0.0, 0.0, 0.0, 0.5),  # 十字光标颜色
         # 用户坐标系配色
-        'user_grid': (0.400, 0.050, 0.600, 0.7),
-        'user_axis': (0.300, 0.000, 0.500, 0.9),
+        'user_grid': (211/255, 47/255, 47/255, 0.5),  # 红色网格，与用户坐标轴保持一致
+        # 用户坐标系轴线：改为红色（与MatplotlibView保持一致）
+        'user_axis': '#d32f2f',
         'user_marker': '#5e35b1',
         'user_text': '#4a148c',
     }
@@ -251,10 +252,7 @@ class SceneRenderer:
         # 设置相等的宽高比
         self.axes.set_aspect('equal', adjustable='box')
         
-        # 绘制原点
-        origin = self.axes.plot(0, 0, 'o', color=self.COLORS['origin_point'],
-                               markersize=8, zorder=4, label='原点')[0]
-        self._artists['coordinate_system'].append(origin)
+        # 说明：原点的“大蓝点”已移除（用户反馈：原始坐标系无需额外强调原点）
     
     def _draw_user_coordinate_system(self, user_pos: Tuple[float, float],
                                      x_range: float, y_range: float):
@@ -293,35 +291,47 @@ class SceneRenderer:
                                    linewidth=2, zorder=16, alpha=1.0)
         self._artists['user_coordinate_system'].append(person)
         
-        # 绘制用户坐标系轴线（紫色虚线）
-        h_axis = self.axes.axhline(y=y, color=self.COLORS['user_axis'],
-                                   linewidth=3, linestyle='--', alpha=0.8, zorder=6)
-        v_axis = self.axes.axvline(x=x, color=self.COLORS['user_axis'],
-                                   linewidth=3, linestyle='--', alpha=0.8, zorder=6)
-        self._artists['user_coordinate_system'].extend([h_axis, v_axis])
+        # 绘制用户坐标系轴线（红色虚线）
+        # 交互要求：线宽下降一半（与MatplotlibView一致）
+        h_axis_main = self.axes.axhline(
+            y=y, color=self.COLORS['user_axis'],
+            linewidth=0.75, linestyle='--', alpha=0.85, zorder=6
+        )
+        v_axis_main = self.axes.axvline(
+            x=x, color=self.COLORS['user_axis'],
+            linewidth=0.75, linestyle='--', alpha=0.85, zorder=6
+        )
+        self._artists['user_coordinate_system'].extend([h_axis_main, v_axis_main])
         
-        # 辅助轴线（白色内线，增强视觉效果）
-        h_aux = self.axes.axhline(y=y, color='white', linewidth=1,
-                                  linestyle='--', alpha=0.6, zorder=5)
-        v_aux = self.axes.axvline(x=x, color='white', linewidth=1,
-                                  linestyle='--', alpha=0.6, zorder=5)
-        self._artists['user_coordinate_system'].extend([h_aux, v_aux])
+        # 辅助轴线（更细更淡，用于增强层次）
+        h_axis_aux = self.axes.axhline(
+            y=y, color=self.COLORS['user_axis'],
+            linewidth=0.25, linestyle='--', alpha=0.35, zorder=5
+        )
+        v_axis_aux = self.axes.axvline(
+            x=x, color=self.COLORS['user_axis'],
+            linewidth=0.25, linestyle='--', alpha=0.35, zorder=5
+        )
+        self._artists['user_coordinate_system'].extend([h_axis_aux, v_axis_aux])
         
-        # 用户位置标签
+        # 用户坐标系“原点标签”：固定显示在用户坐标点正下方2格（不随动）
+        # 说明：这里的“不随动”指不做自动挪动/避让，位置严格为 (x, y-2.0)
         label_text = f'[用户] 位置\n({x:.1f}, {y:.1f})'
-        text_x = x + 1.2
-        text_y = y + 0.8
+        text_x = x
+        text_y = y - 2.0
         
         text = self.axes.text(
             text_x, text_y, label_text,
-            fontsize=12, fontweight='bold',
+            # 字体/字号：与设备标签一致（SceneRenderer设备标签为fontsize=9, bold）
+            fontsize=9, fontweight='bold',
             color=self.COLORS['user_text'],
             ha='center', va='center', zorder=17,
             bbox=dict(
                 boxstyle="round,pad=0.5",
-                facecolor='#f8f4ff',
-                edgecolor=self.COLORS['user_marker'],
-                linewidth=2.5, alpha=0.95
+                # 背景：60%透明度
+                facecolor=(1.0, 1.0, 1.0, 0.6),
+                edgecolor=self.COLORS['user_axis'],
+                linewidth=1.5
             )
         )
         self._artists['user_coordinate_system'].append(text)
@@ -348,11 +358,11 @@ class SceneRenderer:
             # 获取设备颜色（如果有color属性则使用，否则使用默认红色）
             device_color = getattr(device, 'color', self.COLORS['device_point'])
             
-            # 绘制设备点（5x5正方形标记）
+            # 绘制设备点（7x7正方形标记）
             point = self.axes.scatter(
                 [device.x], [device.y],
                 c=device_color,
-                s=25,  # 约5x5像素（s=25 -> 5x5像素）
+                s=49,  # 约7x7像素（s=49 -> 7x7像素）
                 marker='s', zorder=5, alpha=1.0,
                 edgecolors='white', linewidth=0.5
             )
@@ -759,10 +769,10 @@ class SceneRenderer:
         """
         x, y = measurement.x, measurement.y
         
-        # 绘制测量点
+        # 绘制测量点：直径约为6的圆点（Matplotlib中markersize为“直径（points）”）
         point = self.axes.plot(x, y, 'o',
                               color=self.COLORS['measurement_point'],
-                              markersize=8, zorder=7)[0]
+                              markersize=6, zorder=7)[0]
         self._artists['measurement'].append(point)
         
         # 根据坐标系模式绘制连线
@@ -790,18 +800,29 @@ class SceneRenderer:
         
         # 绘制测量信息框
         full_text = f"[{coord_mode}]\n{info_text}"
-        text_x = x + 1.0
-        text_y = y + 1.0
+        
+        # 坐标标签默认位置：在单击标记点正下方，下移2格（2个坐标单位）
+        x_range, y_range = self._current_model.coord_range if self._current_model else (10.0, 10.0)
+        text_x = x
+        text_y = y - 2.0
+        
+        # 边界约束：避免标签超出画布（留0.5单位安全边距）
+        margin = 0.5
+        text_x = max(-x_range + margin, min(text_x, x_range - margin))
+        text_y = max(-y_range + margin, min(text_y, y_range - margin))
         
         text = self.axes.text(
             text_x, text_y, full_text,
             bbox=dict(
                 boxstyle='round,pad=0.5',
-                facecolor=self.COLORS['label_bg'],
+                # 标签底色：透明度60%（覆盖度0.6）
+                facecolor=(1.0, 1.0, 1.0, 0.6),
                 edgecolor=self.COLORS['label_border'],
-                alpha=0.9
+                linewidth=1.5
             ),
+            # 字体/字号：与设备标签说明文字一致
             fontsize=9,
+            fontweight='bold',
             color=self.COLORS['text_color'],
             zorder=8, ha='center', va='center'
         )
@@ -908,7 +929,12 @@ class SceneRenderer:
             y: 鼠标Y坐标
             model: 场景模型
         """
-        # 构建坐标信息文本
+        # 交互调整：不再显示任何“随动坐标信息框”（世界/用户坐标系都关闭）
+        # 清除可能残留的对象，并直接返回
+        self.clear_coordinate_info()
+        return
+        
+        # 构建坐标信息文本（仅用户坐标系模式）
         if model.is_user_frame_active():
             user_pos = model.get_user_position()
             ux, uy = user_pos
@@ -922,16 +948,6 @@ class SceneRenderer:
             )
             text_color = '#4a148c'
             bg_color = '#f8f4ff'
-        else:
-            distance = math.sqrt(x**2 + y**2)
-            angle = math.degrees(math.atan2(y, x))
-            info_text = (
-                f"[世界] 坐标: ({x:.2f}, {y:.2f})\n"
-                f"[距离] 到原点: {distance:.2f}\n"
-                f"[角度] {angle:.1f}°"
-            )
-            text_color = '#1565c0'
-            bg_color = '#f0f8ff'
         
         # 性能优化：内容没变化就不重绘
         if info_text == self._last_coord_info_text:
