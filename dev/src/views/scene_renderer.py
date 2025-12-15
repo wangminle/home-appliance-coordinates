@@ -266,30 +266,19 @@ class SceneRenderer:
         """
         x, y = user_pos
         
-        # 绘制用户位置标记（增强版三层设计）
-        # 最外圈：深色阴影效果
-        shadow = self.axes.scatter([x], [y], marker='o', s=320,
-                                   c='#2d1b5c', alpha=0.3, zorder=13)
-        self._artists['user_coordinate_system'].append(shadow)
-        
-        # 外圈：白色边框
-        outer = self.axes.scatter([x], [y], marker='o', s=280,
-                                  c='white', edgecolors=self.COLORS['user_marker'],
-                                  linewidth=6, zorder=14, alpha=0.98)
-        self._artists['user_coordinate_system'].append(outer)
-        
-        # 内圈：深紫色主体
-        inner = self.axes.scatter([x], [y], marker='o', s=180,
-                                  c=self.COLORS['user_marker'],
-                                  edgecolors='white', linewidth=4,
-                                  label='用户位置', zorder=15, alpha=1.0)
-        self._artists['user_coordinate_system'].append(inner)
-        
-        # 人形符号叠加
-        person = self.axes.scatter([x], [y], marker='*', s=120,
-                                   c='white', edgecolors=self.COLORS['user_marker'],
-                                   linewidth=2, zorder=16, alpha=1.0)
-        self._artists['user_coordinate_system'].append(person)
+        # 绘制用户位置标记：正五边形（边长约4像素）
+        # 正五边形外接圆半径约0.2个坐标单位，确保边长视觉效果约4像素
+        pentagon = patches.RegularPolygon(
+            (x, y), numVertices=5, radius=0.2,
+            facecolor=self.COLORS['user_marker'],  # 紫色填充
+            edgecolors='white',  # 白色边框
+            linewidth=2, 
+            zorder=15, 
+            alpha=1.0,
+            label='用户位置'
+        )
+        self.axes.add_patch(pentagon)
+        self._artists['user_coordinate_system'].append(pentagon)
         
         # 绘制用户坐标系轴线（红色虚线）
         # 交互要求：线宽下降一半（与MatplotlibView一致）

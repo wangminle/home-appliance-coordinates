@@ -23,6 +23,7 @@ plt.rcParams['axes.unicode_minus'] = False
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
+from models.locked_measurement import LockedMeasurement
 # 使用新的高性能布局管理器
 from utils.fast_layout import FastLayoutManager, LayoutElement, ElementType, BoundingBox
 
@@ -65,6 +66,17 @@ class MatplotlibView:
         'user_axis': '#d32f2f',                     # 红色虚线坐标轴（按需求调整）
         'user_marker': '#5e35b1',     # 更醒目的深紫色用户位置标记
         'user_text': '#4a148c',       # 深紫色文字
+        # ✨ V2.4 锁定扇形功能配色
+        'pin_unlocked': (1.0, 1.0, 1.0, 0.8),      # 解锁图钉：白色
+        'pin_locked': '#e53935',                    # 锁定图钉：红色
+        'pin_bg_unlocked': (0.9, 0.9, 0.9, 0.5),   # 解锁背景：半透明灰
+        'pin_bg_locked': (1.0, 1.0, 1.0, 1.0),     # 锁定背景：纯白不透明
+        'locked_line': '#1976d2',                   # 锁定实线：蓝色
+        'locked_sector_fill': (25/255, 118/255, 210/255, 0.25),  # 锁定扇形：蓝色
+        'locked_sector_edge': '#1976d2',            # 锁定扇形边缘：蓝色
+        'comparison_line': '#ff9800',               # 对比虚线：橙色
+        'comparison_text': '#e65100',               # 对比信息文字：深橙色
+        'comparison_bg': '#fff3e0',                 # 对比信息背景：浅橙色
     }
     
     def __init__(self, parent_frame: tk.Frame):
@@ -104,6 +116,14 @@ class MatplotlibView:
         self.crosshair_artists = []
         self.user_position_artists = []  # 用户位置相关绘制对象 ✨ 双坐标系功能
         self.coordinate_info_artists = []  # 坐标信息显示对象 ✨ 第五步新增功能
+        
+        # ✨ V2.4 锁定扇形功能 - 说话人方向和影响范围
+        self.locked_measurement = LockedMeasurement()  # 锁定测量数据模型
+        self.pin_artists = []              # 图钉绘制对象
+        self.comparison_artists = []       # 对比虚线和信息框
+        self.pin_position = None           # 图钉位置 (x, y)
+        self.toast_artist = None           # Toast 提示对象
+        self.toast_timer_id = None         # Toast 定时器 ID
         
         # ✨ 高性能布局管理器（替代adjustText主要功能）
         self.fast_layout_manager: Optional[FastLayoutManager] = None
@@ -326,11 +346,24 @@ class MatplotlibView:
         for artist in self.sector_artists:
             if hasattr(artist, 'get_paths') or hasattr(artist, 'get_xy'):
                 self.obstacle_objects.append(artist)
-        # 仅对“非固定标签”使用adjustText（设备标签、测量标签保持固定位置）
-        target_texts = [
-            t for t in self.text_objects
-            if self._get_element_type_from_text(t) not in (ElementType.DEVICE_INFO, ElementType.MEASUREMENT_INFO)
-        ]
+        # 仅对"非固定标签"使用adjustText（设备标签、测量标签保持固定位置）
+        # 同时收集固定标签作为障碍物，防止其他标签与固定标签重叠
+        target_texts = []
+        fixed_labels = []  # 固定标签列表（设备标签、测量标签）
+        
+        for t in self.text_objects:
+            element_type = self._get_element_type_from_text(t)
+            if element_type in (ElementType.DEVICE_INFO, ElementType.MEASUREMENT_INFO):
+                # 设备标签和测量标签保持固定位置，作为障碍物
+                fixed_labels.append(t)
+            else:
+                # 其他标签参与adjustText调整
+                target_texts.append(t)
+        
+        # 将固定标签添加到障碍物列表中，这样adjustText会让其他标签避开它们
+        # 这可以防止其他标签移动到与固定测量标签/设备标签重叠的位置
+        self.obstacle_objects.extend(fixed_labels)
+        
         if not target_texts:
             return
         
@@ -389,7 +422,7 @@ class MatplotlibView:
     
     def _on_mouse_click(self, event):
         """
-        处理鼠标点击事件 ✨ 支持标签拖拽
+        处理鼠标点击事件 ✨ 支持标签拖拽 + 图钉点击
         """
         if event.inaxes != self.axes:
             return
@@ -401,7 +434,12 @@ class MatplotlibView:
         current_time = time.time()
         
         if event.button == 1:  # 左键
-            # ✨ 首先检查是否点击了可拖拽的标签
+            # ✨ V2.4 首先检查是否点击了图钉
+            if self._is_click_on_pin(x, y):
+                self._toggle_pin_lock()
+                return
+            
+            # ✨ 检查是否点击了可拖拽的标签
             clicked_label = self._find_label_at(x, y)
             if clicked_label is not None:
                 # 开始拖拽标签
@@ -413,7 +451,7 @@ class MatplotlibView:
                 # 双击：绘制90度扇形
                 self._handle_double_click(x, y)
             else:
-                # 单击：创建测量点
+                # 单击：创建测量点或对比虚线
                 self._handle_single_click(x, y)
             
             self.last_click_time = current_time
@@ -425,13 +463,18 @@ class MatplotlibView:
                 self._reset_label_to_auto(clicked_label)
                 return
             
-            # 清除所有测量点和扇形
+            # 清除测量点和扇形（根据锁定状态）
             self._handle_right_click()
     
     def _handle_single_click(self, x: float, y: float):
         """
-        处理左键单击：创建测量点 ✨ 支持动态交互模式
+        处理左键单击：创建测量点或对比虚线 ✨ V2.4 支持锁定对比模式
         """
+        # ✨ V2.4 如果已锁定，绘制对比虚线
+        if self.locked_measurement.is_locked:
+            self._draw_comparison_line(x, y)
+            return
+        
         # 根据用户坐标系状态选择参考点 ✨ 核心逻辑
         if self.user_coord_enabled and self.user_position:
             # 用户坐标系模式：以用户位置为参考点
@@ -457,26 +500,57 @@ class MatplotlibView:
     def _handle_double_click(self, x: float, y: float):
         """
         处理左键双击：绘制90度扇形（以连线为平分线向两侧各45度）
+        ✨ V2.4 增加锁定状态检测
         """
+        # ✨ V2.4 如果已锁定，显示 Toast 提示并返回
+        if self.locked_measurement.is_locked:
+            self._show_toast("当前说话人声音影响区域已锁定，请解锁后重试")
+            return
+        
         # 保存扇形参考点
         self.sector_point = (x, y)
         
-        # 重新绘制
+        # 计算中心点（原点或用户位置）
+        if self.user_coord_enabled and self.user_position:
+            center = self.user_position
+        else:
+            center = (0.0, 0.0)
+        
+        # ✨ V2.4 更新锁定测量数据（但未锁定）
+        self.locked_measurement.set_measurement((x, y), center)
+        
+        # 重新绘制扇形
         self._draw_sector()
+        
+        # ✨ V2.4 绘制图钉（双击点正上方）
+        self._draw_pin(x, y + 0.8)
         
         # 触发回调
         if self.on_double_click_callback:
             self.on_double_click_callback(x, y)
         
-        print(f"✅ 创建扇形: 参考点({x:.3f}, {y:.3f})")
+        print(f"✅ 创建扇形: 参考点({x:.3f}, {y:.3f})，点击图钉可锁定")
     
     def _handle_right_click(self):
         """
-        处理右键单击：清除所有测量点和扇形，并恢复设备信息框到默认位置
+        处理右键单击：根据锁定状态决定清除范围 ✨ V2.4 锁定模式支持
         """
+        # ✨ V2.4 如果已锁定，只清除对比虚线，保留锁定的扇形
+        if self.locked_measurement.is_locked:
+            self._clear_comparison()
+            self.canvas.draw_idle()
+            print("✅ 已清除对比虚线，锁定扇形保留")
+            return
+        
+        # 解锁状态：清除全部（原有行为）
         # 清除测量点
         self.measurement_point = None
         self.sector_point = None
+        
+        # ✨ V2.4 清除锁定测量数据和图钉
+        self.locked_measurement.clear()
+        self._clear_pin()
+        self._clear_comparison()
         
         # 恢复所有设备信息框到默认位置 ✨ 智能避让系统
         self._reset_device_info_positions()
@@ -1212,8 +1286,21 @@ class MatplotlibView:
             x: 用户X坐标
             y: 用户Y坐标
         """
-        self.user_position = (x, y)
+        old_position = self.user_position
+        
+        # 先做一次格式化输出，确保x/y是可用数值；也避免非法输入导致状态被提前改动
         print(f"✨ 视图设置用户位置: ({x:.3f}, {y:.3f})")
+        
+        # ✨ V2.4 如果已锁定扇形且“参考中心”发生变化，自动解锁
+        # 关键修复点：
+        # - 当锁定扇形在世界坐标系下创建（中心点为(0,0)）后，用户首次启用用户坐标系并从None设置用户位置时
+        #   参考中心会从(0,0)切换到用户位置；若不解锁，后续对比虚线仍会使用旧中心点，导致角度/距离错误。
+        old_reference = old_position if (self.user_coord_enabled and old_position is not None) else (0.0, 0.0)
+        new_reference = (x, y) if self.user_coord_enabled else (0.0, 0.0)
+        if self.locked_measurement.is_locked and old_reference != new_reference:
+            self.unlock_on_user_coord_change()
+        
+        self.user_position = (x, y)
         
         if self.user_coord_enabled:
             # 先清除之前的用户位置相关元素（标记和轴线）
@@ -1277,31 +1364,19 @@ class MatplotlibView:
         
         x, y = self.user_position
         
-        # 绘制用户位置标记（增强版三层设计）✨ 视觉优化增强版
-        # 最外圈：深色阴影效果
-        shadow_marker = self.axes.scatter([x], [y], marker='o', s=320, 
-                                        c='#2d1b5c', alpha=0.3, 
-                                        zorder=13)
-        self.user_position_artists.append(shadow_marker)
-        
-        # 外圈：白色边框，增大尺寸提升对比度
-        outer_marker = self.axes.scatter([x], [y], marker='o', s=280, 
-                                       c='white', edgecolors=self.COLORS['user_marker'], 
-                                       linewidth=6, zorder=14, alpha=0.98)
-        self.user_position_artists.append(outer_marker)
-        
-        # 内圈：深紫色主体标记，更醒目
-        inner_marker = self.axes.scatter([x], [y], marker='o', s=180, 
-                                       c=self.COLORS['user_marker'], 
-                                       edgecolors='white', linewidth=4,
-                                       label='用户位置', zorder=15, alpha=1.0)
-        self.user_position_artists.append(inner_marker)
-        
-        # 人形符号叠加（增强可见性和尺寸）
-        person_marker = self.axes.scatter([x], [y], marker='*', s=120, 
-                                        c='white', edgecolors=self.COLORS['user_marker'],
-                                        linewidth=2, zorder=16, alpha=1.0)
-        self.user_position_artists.append(person_marker)
+        # 绘制用户位置标记：正五边形（边长约4像素）
+        # 正五边形外接圆半径约0.2个坐标单位，确保边长视觉效果约4像素
+        pentagon = patches.RegularPolygon(
+            (x, y), numVertices=5, radius=0.2,
+            facecolor=self.COLORS['user_marker'],  # 紫色填充
+            edgecolor='white',  # 白色边框
+            linewidth=2, 
+            zorder=15, 
+            alpha=1.0,
+            label='用户位置'
+        )
+        self.axes.add_patch(pentagon)
+        self.user_position_artists.append(pentagon)
         
         # 用户坐标系“原点标签”：固定显示在用户坐标点正下方2格（不随动）
         # 说明：
@@ -1720,3 +1795,334 @@ class MatplotlibView:
             self.canvas.get_tk_widget().config(cursor=cursor_name)
         except Exception:
             pass  # 如果设置光标失败，忽略 
+    
+    # ==================== V2.4 锁定扇形功能 - 图钉和对比 ====================
+    
+    def _is_click_on_pin(self, x: float, y: float) -> bool:
+        """
+        检查是否点击了图钉
+        
+        Args:
+            x: 鼠标X坐标
+            y: 鼠标Y坐标
+            
+        Returns:
+            True如果点击在图钉上，否则False
+        """
+        if self.pin_position is None:
+            return False
+        
+        px, py = self.pin_position
+        # 扩大点击区域，提高易用性（0.4个坐标单位半径）
+        click_radius = 0.4
+        distance = math.sqrt((x - px)**2 + (y - py)**2)
+        return distance <= click_radius
+    
+    def _toggle_pin_lock(self):
+        """
+        切换图钉锁定状态
+        """
+        new_state = self.locked_measurement.toggle_lock()
+        
+        if new_state:
+            # 刚锁定：改变扇形和线段颜色为蓝色
+            self._update_sector_style(locked=True)
+            print("🔒 扇形已锁定，单击可绘制对比虚线")
+        else:
+            # 解锁：恢复红色，清除对比虚线
+            self._update_sector_style(locked=False)
+            self._clear_comparison()
+            print("🔓 扇形已解锁")
+        
+        # 重绘图钉（更新样式）
+        if self.pin_position:
+            px, py = self.pin_position
+            self._draw_pin(px, py)
+    
+    def _draw_pin(self, x: float, y: float):
+        """
+        绘制图钉组件
+        
+        Args:
+            x: 图钉X坐标
+            y: 图钉Y坐标
+        """
+        # 清除之前的图钉
+        self._clear_pin()
+        
+        self.pin_position = (x, y)
+        is_locked = self.locked_measurement.is_locked
+        
+        # 图钉背景圆
+        bg_color = self.COLORS['pin_bg_locked'] if is_locked else self.COLORS['pin_bg_unlocked']
+        edge_color = self.COLORS['pin_locked'] if is_locked else '#888888'
+        
+        bg_circle = patches.Circle(
+            (x, y), radius=0.25,
+            facecolor=bg_color,
+            edgecolor=edge_color,
+            linewidth=2.0 if is_locked else 1.5,
+            zorder=25
+        )
+        self.axes.add_patch(bg_circle)
+        self.pin_artists.append(bg_circle)
+        
+        # 图钉图标（使用简单的符号）
+        pin_color = self.COLORS['pin_locked'] if is_locked else '#666666'
+        pin_symbol = '●' if is_locked else '○'  # 实心圆表示锁定，空心圆表示解锁
+        
+        pin_text = self.axes.text(
+            x, y, pin_symbol,
+            fontsize=14,
+            ha='center', va='center',
+            zorder=26,
+            color=pin_color,
+            fontweight='bold'
+        )
+        self.pin_artists.append(pin_text)
+        
+        # 添加小三角形指向双击点（图钉的"针"）
+        triangle_y = y - 0.35  # 指向下方
+        triangle = patches.RegularPolygon(
+            (x, triangle_y), numVertices=3, radius=0.12,
+            orientation=math.pi,  # 倒三角形
+            facecolor=pin_color,
+            edgecolor='white',
+            linewidth=1,
+            zorder=24
+        )
+        self.axes.add_patch(triangle)
+        self.pin_artists.append(triangle)
+        
+        self.canvas.draw_idle()
+    
+    def _clear_pin(self):
+        """清除图钉组件"""
+        for artist in self.pin_artists:
+            try:
+                artist.remove()
+            except (ValueError, AttributeError):
+                pass
+        self.pin_artists.clear()
+    
+    def _update_sector_style(self, locked: bool):
+        """
+        更新扇形和连线的样式（锁定/解锁时改变颜色）
+        
+        Args:
+            locked: True为锁定样式（蓝色），False为解锁样式（红色）
+        """
+        if not self.sector_artists:
+            return
+        
+        # 定义颜色
+        if locked:
+            fill_color = self.COLORS['locked_sector_fill']
+            edge_color = self.COLORS['locked_sector_edge']
+            line_color = self.COLORS['locked_line']
+        else:
+            fill_color = self.COLORS['sector_fill']
+            edge_color = self.COLORS['sector_edge']
+            line_color = self.COLORS['sector_edge']
+        
+        # 更新扇形填充和边缘颜色
+        for artist in self.sector_artists:
+            try:
+                if hasattr(artist, 'set_facecolor'):
+                    artist.set_facecolor(fill_color)
+                if hasattr(artist, 'set_edgecolor'):
+                    artist.set_edgecolor(edge_color)
+                if hasattr(artist, 'set_color'):
+                    artist.set_color(edge_color)
+                # 锁定时加粗线条
+                if hasattr(artist, 'set_linewidth'):
+                    artist.set_linewidth(2.5 if locked else 2.0)
+            except Exception:
+                pass
+        
+        self.canvas.draw_idle()
+    
+    def _draw_comparison_line(self, x: float, y: float):
+        """
+        绘制对比虚线并计算夹角和距离
+        
+        Args:
+            x: 新测量点X坐标
+            y: 新测量点Y坐标
+        """
+        # 清除之前的对比线
+        self._clear_comparison()
+        
+        # 获取锁定的测量数据
+        if not self.locked_measurement.has_data():
+            return
+        
+        center = self.locked_measurement.center_point
+        
+        # 计算对比数据
+        comparison = self.locked_measurement.calculate_comparison((x, y))
+        angle_diff = comparison['angle_diff']
+        new_distance = comparison['new_distance']
+        
+        # 绘制橙色对比短虚线（图钉锁定后的第二条线段）
+        line = self.axes.plot(
+            [center[0], x], [center[1], y],
+            color=self.COLORS['comparison_line'],
+            linewidth=2.0,
+            linestyle='--',
+            dashes=(3, 2),  # 短虚线：3像素实线，2像素空白（图钉锁定后的第二条线段）
+            alpha=0.9,
+            zorder=15
+        )[0]
+        self.comparison_artists.append(line)
+        
+        # 绘制新测量点标记（小圆点）
+        point = self.axes.plot(x, y, 'o',
+                              color=self.COLORS['comparison_line'],
+                              markersize=8, zorder=16)[0]
+        self.comparison_artists.append(point)
+        
+        # 绘制对比信息框（点击点下方）
+        info_text = f"📐 夹角: {angle_diff:.1f}°\n📏 距离: {new_distance:.3f}"
+        info_box = self.axes.text(
+            x, y - 1.0,  # 点击点下方1个单位
+            info_text,
+            bbox=dict(
+                boxstyle='round,pad=0.4',
+                facecolor=self.COLORS['comparison_bg'],
+                edgecolor=self.COLORS['comparison_line'],
+                linewidth=1.5,
+                alpha=0.95
+            ),
+            fontsize=10,
+            fontweight='bold',
+            color=self.COLORS['comparison_text'],
+            ha='center', va='top',
+            zorder=17
+        )
+        self.comparison_artists.append(info_box)
+        
+        self.canvas.draw_idle()
+        print(f"📐 夹角: {angle_diff:.1f}°, 距离: {new_distance:.3f}")
+    
+    def _clear_comparison(self):
+        """清除对比虚线和信息框"""
+        for artist in self.comparison_artists:
+            try:
+                artist.remove()
+            except (ValueError, AttributeError):
+                pass
+        self.comparison_artists.clear()
+    
+    def _show_toast(self, message: str, duration: int = 2000):
+        """
+        显示Toast提示消息
+        
+        Args:
+            message: 提示消息内容
+            duration: 显示时长（毫秒），默认2000ms
+        """
+        # 清除之前的Toast
+        self._hide_toast()
+        
+        # 在画布中央偏上位置显示Toast
+        x_range, y_range = self.current_range
+        toast_x = 0
+        toast_y = y_range * 0.7  # 上方70%位置
+        
+        # 创建Toast文本框
+        self.toast_artist = self.axes.text(
+            toast_x, toast_y,
+            message,
+            bbox=dict(
+                boxstyle='round,pad=0.6',
+                facecolor='#424242',  # 深灰色背景
+                edgecolor='#212121',
+                linewidth=1,
+                alpha=0.9
+            ),
+            fontsize=11,
+            fontweight='bold',
+            color='white',
+            ha='center', va='center',
+            zorder=100  # 最高层级
+        )
+        
+        self.canvas.draw_idle()
+        
+        # 设置定时器自动隐藏
+        try:
+            tk_widget = self.canvas.get_tk_widget()
+            self.toast_timer_id = tk_widget.after(duration, self._hide_toast)
+        except Exception:
+            pass
+        
+        print(f"🔔 Toast: {message}")
+    
+    def _hide_toast(self):
+        """隐藏Toast提示"""
+        # 取消定时器
+        if self.toast_timer_id is not None:
+            try:
+                tk_widget = self.canvas.get_tk_widget()
+                tk_widget.after_cancel(self.toast_timer_id)
+            except Exception:
+                pass
+            self.toast_timer_id = None
+        
+        # 移除Toast对象
+        if self.toast_artist is not None:
+            try:
+                self.toast_artist.remove()
+            except (ValueError, AttributeError):
+                pass
+            self.toast_artist = None
+            self.canvas.draw_idle()
+    
+    # ==================== V2.4 锁定扇形功能 - 数据接口 ====================
+    
+    def get_locked_measurement(self) -> LockedMeasurement:
+        """获取锁定测量数据模型"""
+        return self.locked_measurement
+    
+    def set_locked_measurement(self, data: LockedMeasurement):
+        """
+        设置锁定测量数据（用于项目加载）
+        
+        Args:
+            data: 锁定测量数据模型
+        """
+        self.locked_measurement = data
+        
+        # 如果有数据，重新绘制
+        if data.has_data():
+            self.sector_point = data.sector_point
+            self._draw_sector()
+            
+            # 绘制图钉
+            if data.pin_position:
+                self._draw_pin(*data.pin_position)
+            
+            # 如果已锁定，更新样式
+            if data.is_locked:
+                self._update_sector_style(locked=True)
+        
+        self.canvas.draw_idle()
+    
+    def unlock_on_user_coord_change(self):
+        """
+        用户坐标系切换时自动解锁
+        
+        当用户坐标系位置改变时调用此方法，自动解锁扇形
+        """
+        if self.locked_measurement.is_locked:
+            self.locked_measurement.unlock()
+            self._update_sector_style(locked=False)
+            self._clear_comparison()
+            
+            # 更新图钉样式
+            if self.pin_position:
+                self._draw_pin(*self.pin_position)
+            
+            self._show_toast("用户位置已更改，扇形自动解锁")
+            print("🔓 用户坐标系切换，扇形自动解锁")

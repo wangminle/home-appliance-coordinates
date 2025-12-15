@@ -12,6 +12,7 @@ from typing import List, Dict, Any, Optional, Tuple
 from datetime import datetime
 from pathlib import Path
 from models.device_model import Device
+from models.locked_measurement import LockedMeasurement
 
 
 class ProjectManagerError(Exception):
@@ -90,11 +91,13 @@ class ProjectManager:
                     coordinate_settings: Dict[str, float],
                     user_coord_settings: Optional[Dict[str, Any]] = None,
                     project_info: Optional[Dict[str, str]] = None,
-                    label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[bool, str]:
+                    label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
+                    locked_measurement: Optional[LockedMeasurement] = None) -> Tuple[bool, str]:
         """
         保存项目到JSON文件
         
         V2.1: 添加标签位置持久化支持
+        V2.4: 添加锁定扇形数据持久化支持
         
         Args:
             file_path: 保存路径
@@ -103,6 +106,7 @@ class ProjectManager:
             user_coord_settings: 用户坐标系设置（可选）
             project_info: 项目信息（可选）
             label_positions: 标签位置字典（可选，仅保存手动位置）
+            locked_measurement: 锁定测量数据（可选）V2.4新增
             
         Returns:
             (成功标志, 消息)
@@ -114,7 +118,8 @@ class ProjectManager:
                 coordinate_settings,
                 user_coord_settings,
                 project_info,
-                label_positions
+                label_positions,
+                locked_measurement
             )
             
             # 验证数据
@@ -155,7 +160,8 @@ class ProjectManager:
                    coordinate_settings: Dict[str, float],
                    user_coord_settings: Optional[Dict[str, Any]] = None,
                    project_info: Optional[Dict[str, str]] = None,
-                   label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Tuple[bool, str]:
+                   label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
+                   locked_measurement: Optional[LockedMeasurement] = None) -> Tuple[bool, str]:
         """
         保存草稿到JSON文件（不更新项目状态）
         
@@ -163,6 +169,7 @@ class ProjectManager:
         专门用于自动保存功能。
         
         V2.1: 添加标签位置持久化支持
+        V2.4: 添加锁定扇形数据持久化支持
         
         Args:
             file_path: 保存路径
@@ -171,6 +178,7 @@ class ProjectManager:
             user_coord_settings: 用户坐标系设置（可选）
             project_info: 项目信息（可选）
             label_positions: 标签位置字典（可选）
+            locked_measurement: 锁定测量数据（可选）V2.4新增
             
         Returns:
             (成功标志, 消息)
@@ -182,7 +190,8 @@ class ProjectManager:
                 coordinate_settings,
                 user_coord_settings,
                 project_info,
-                label_positions
+                label_positions,
+                locked_measurement
             )
             
             # 验证数据
@@ -249,6 +258,13 @@ class ProjectManager:
             if 'label_positions' in project_data:
                 label_count = len(project_data['label_positions'])
                 print(f"📍 加载 {label_count} 个手动标签位置")
+            
+            # V2.4: 解析锁定测量数据（如果有）
+            if 'locked_measurement' in project_data:
+                locked_data = project_data['locked_measurement']
+                project_data['locked_measurement_parsed'] = LockedMeasurement.from_dict(locked_data)
+                status = "🔒锁定" if locked_data.get('is_locked', False) else "🔓解锁"
+                print(f"📍 加载锁定测量数据 ({status})")
             
             # 更新项目状态
             self.set_project_path(str(file_path_obj))
@@ -403,11 +419,13 @@ class ProjectManager:
                            coordinate_settings: Dict[str, float],
                            user_coord_settings: Optional[Dict[str, Any]] = None,
                            project_info: Optional[Dict[str, str]] = None,
-                           label_positions: Optional[Dict[str, Dict[str, Any]]] = None) -> Dict[str, Any]:
+                           label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
+                           locked_measurement: Optional[LockedMeasurement] = None) -> Dict[str, Any]:
         """
         构建项目数据结构
         
         V2.1: 添加标签位置持久化支持
+        V2.4: 添加锁定扇形数据持久化支持
         
         Args:
             devices: 设备列表
@@ -415,6 +433,7 @@ class ProjectManager:
             user_coord_settings: 用户坐标系设置
             project_info: 项目信息
             label_positions: 标签位置字典（仅保存手动位置）
+            locked_measurement: 锁定测量数据（V2.4新增）
             
         Returns:
             项目数据字典
@@ -473,6 +492,12 @@ class ProjectManager:
             if manual_positions:
                 project_data['label_positions'] = manual_positions
                 print(f"💾 保存 {len(manual_positions)} 个手动标签位置")
+        
+        # V2.4: 添加锁定测量数据（说话人方向和影响范围）
+        if locked_measurement and locked_measurement.has_data():
+            project_data['locked_measurement'] = locked_measurement.to_dict()
+            status = "🔒锁定" if locked_measurement.is_locked else "🔓解锁"
+            print(f"📍 保存锁定测量数据 ({status})")
         
         return project_data
     

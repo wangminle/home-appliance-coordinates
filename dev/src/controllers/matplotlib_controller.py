@@ -840,12 +840,16 @@ class MatplotlibController:
                 'user_y': self.canvas_view.user_position[1] if self.canvas_view.user_position else None
             }
             
+            # V2.4: 获取锁定测量数据
+            locked_measurement = self.canvas_view.get_locked_measurement()
+            
             # 保存项目
             success, message = self.project_manager.save_project(
                 file_path,
                 devices,
                 coordinate_settings,
-                user_coord_settings
+                user_coord_settings,
+                locked_measurement=locked_measurement
             )
             
             if success:
@@ -927,6 +931,12 @@ class MatplotlibController:
             self.canvas_view.update_devices(self.device_manager.get_devices())
             self.input_panel.update_devices(self.device_manager.get_devices())
             self.input_panel.set_coordinate_range(x_range, y_range)
+            
+            # V2.4: 恢复锁定测量数据（说话人方向和影响范围）
+            if 'locked_measurement_parsed' in project_data:
+                locked_measurement = project_data['locked_measurement_parsed']
+                self.canvas_view.set_locked_measurement(locked_measurement)
+                print(f"📍 恢复锁定测量数据: {locked_measurement}")
             
             # 添加到最近文件
             self.config_manager.add_recent_file(file_path)

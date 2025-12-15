@@ -163,81 +163,81 @@ class InputPanel:
         )
         range_frame.pack(fill='x', padx=10, pady=(10, 5))
         
-        # 坐标范围输入区域（按要求重新布局）
+        # 坐标范围设置行（单行布局）
+        input_row_frame = ttk.Frame(range_frame)
+        input_row_frame.pack(fill='x', pady=5)
         
-        # X轴范围设置行
-        x_frame = ttk.Frame(range_frame)
-        x_frame.pack(fill='x', pady=(0, 5))
+        # --- X轴部分 ---
         
-        # X轴标签（左对齐）
+        # X轴标签
         ttk.Label(
-            x_frame,
+            input_row_frame,
             text="X轴范围:",
-            font=('Arial', 12)
-        ).pack(side='left')
+            font=('Arial', 11)  # 字号调小1号 (12 -> 11)
+        ).pack(side='left', padx=(0, 5))
         
-        # 中间输入区域（距离标签20px）
-        x_input_frame = ttk.Frame(x_frame)
-        x_input_frame.pack(side='left', padx=(20, 0))
+        # X轴输入框容器
+        x_input_frame = ttk.Frame(input_row_frame)
+        x_input_frame.pack(side='left')
         
         ttk.Label(
             x_input_frame,
             text="±",
-            font=('Arial', 12)
+            font=('Arial', 11)
         ).pack(side='left')
         
         x_entry = ttk.Entry(
             x_input_frame,
             textvariable=self.x_range_var,
-            width=8,
-            font=('Arial', 12),
+            width=6,  # 稍微调窄一点以适应单行
+            font=('Arial', 11),
             justify='center'
         )
-        x_entry.pack(side='left', padx=(5, 0))
-        # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
-        x_entry.bind('<Button-1>', lambda e, w=x_entry: w.focus_set())
+        x_entry.pack(side='left', padx=(2, 0))
+        # 绑定点击事件确保获取焦点
+        x_entry.bind('<Button-1>', lambda e, w=x_entry: (w.focus_set(), 'break')[1])
         
-        # Y轴范围设置行
-        y_frame = ttk.Frame(range_frame)
-        y_frame.pack(fill='x', pady=(0, 10))
+        # --- Y轴部分 ---
         
-        # Y轴标签（左对齐）
+        # Y轴标签 (增加左侧间距)
         ttk.Label(
-            y_frame,
+            input_row_frame,
             text="Y轴范围:",
-            font=('Arial', 12)
-        ).pack(side='left')
+            font=('Arial', 11)  # 字号调小1号 (12 -> 11)
+        ).pack(side='left', padx=(15, 5))
         
-        # 中间输入区域（距离标签20px）
-        y_input_frame = ttk.Frame(y_frame)
-        y_input_frame.pack(side='left', padx=(20, 0))
+        # Y轴输入框容器
+        y_input_frame = ttk.Frame(input_row_frame)
+        y_input_frame.pack(side='left')
         
         ttk.Label(
             y_input_frame,
             text="±",
-            font=('Arial', 12)
+            font=('Arial', 11)
         ).pack(side='left')
         
         y_entry = ttk.Entry(
             y_input_frame,
             textvariable=self.y_range_var,
-            width=8,
-            font=('Arial', 12),
+            width=6,  # 稍微调窄一点以适应单行
+            font=('Arial', 11),
             justify='center'
         )
-        y_entry.pack(side='left', padx=(5, 0))
-        # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
-        y_entry.bind('<Button-1>', lambda e, w=y_entry: w.focus_set())
+        y_entry.pack(side='left', padx=(2, 0))
+        # 绑定点击事件确保获取焦点
+        y_entry.bind('<Button-1>', lambda e, w=y_entry: (w.focus_set(), 'break')[1])
         
-        # 应用设置按钮（右侧，与下方"设置用户位置"按钮左边缘对齐）
+        # --- 按钮部分 ---
+        
+        # 范围设置按钮 (右对齐)
         apply_btn = ttk.Button(
-            y_frame,
-            text="应用设置",
+            input_row_frame,
+            text="范围设置",
             command=self._on_range_apply,
-            style='Custom.TButton'
+            style='Custom.TButton',
+            width=8  # 设置固定宽度
         )
-        # 使用padx来调整水平位置，使其与设置用户位置按钮左边缘对齐
-        apply_btn.pack(side='right', padx=(0, 0))
+        apply_btn.pack(side='right', padx=(5, 0))
         
         # 用户坐标系开关
         user_coord_frame = ttk.Frame(range_frame)
@@ -280,7 +280,7 @@ class InputPanel:
         )
         self.user_x_entry.pack(side='left', padx=(0, 15))
         # 绑定点击事件确保获取焦点
-        self.user_x_entry.bind('<Button-1>', lambda e: self.user_x_entry.focus_set())
+        self.user_x_entry.bind('<Button-1>', lambda e: (self.user_x_entry.focus_set(), 'break')[1])
         
         # Y坐标输入
         ttk.Label(
@@ -298,7 +298,7 @@ class InputPanel:
         )
         self.user_y_entry.pack(side='left', padx=(0, 15))
         # 绑定点击事件确保获取焦点
-        self.user_y_entry.bind('<Button-1>', lambda e: self.user_y_entry.focus_set())
+        self.user_y_entry.bind('<Button-1>', lambda e: (self.user_y_entry.focus_set(), 'break')[1])
         
         # 设置用户位置按钮（同一行右侧）
         set_user_pos_btn = ttk.Button(
@@ -407,20 +407,20 @@ class InputPanel:
         self.name_entry = ttk.Entry(input_frame, textvariable=self.device_name_var)
         self.name_entry.grid(row=0, column=1, sticky='ew', pady=2)
         # ✨ 绑定点击事件确保获取焦点（修复与Matplotlib canvas焦点冲突问题）
-        self.name_entry.bind('<Button-1>', lambda e: self.name_entry.focus_set())
+        self.name_entry.bind('<Button-1>', lambda e: (self.name_entry.focus_set(), 'break')[1])
         
         # Coordinates
         ttk.Label(input_frame, text="X坐标:", width=8).grid(row=1, column=0, sticky='w', pady=2)
         self.x_entry = ttk.Entry(input_frame, textvariable=self.device_x_var)
         self.x_entry.grid(row=1, column=1, sticky='ew', pady=2)
         # ✨ 绑定点击事件确保获取焦点
-        self.x_entry.bind('<Button-1>', lambda e: self.x_entry.focus_set())
+        self.x_entry.bind('<Button-1>', lambda e: (self.x_entry.focus_set(), 'break')[1])
         
         ttk.Label(input_frame, text="Y坐标:", width=8).grid(row=2, column=0, sticky='w', pady=2)
         self.y_entry = ttk.Entry(input_frame, textvariable=self.device_y_var)
         self.y_entry.grid(row=2, column=1, sticky='ew', pady=2)
         # ✨ 绑定点击事件确保获取焦点
-        self.y_entry.bind('<Button-1>', lambda e: self.y_entry.focus_set())
+        self.y_entry.bind('<Button-1>', lambda e: (self.y_entry.focus_set(), 'break')[1])
         
         # ✨ 新增颜色选择下拉框
         ttk.Label(input_frame, text="颜色:", width=8).grid(row=3, column=0, sticky='w', pady=2)
