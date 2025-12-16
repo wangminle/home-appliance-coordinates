@@ -95,6 +95,23 @@ class InputPanel:
         # 用户坐标系回调函数 ✨ 双坐标系功能
         self.on_user_coord_toggle_callback: Optional[Callable[[bool], None]] = None
         self.on_user_position_set_callback: Optional[Callable[[float, float], None]] = None
+        # 背景图回调函数 ✨ V2.5 背景户型图功能
+        self.on_background_import_callback: Optional[Callable[[str], None]] = None
+        self.on_background_remove_callback: Optional[Callable[[], None]] = None
+        self.on_background_scale_change_callback: Optional[Callable[[float], None]] = None
+        self.on_background_alpha_change_callback: Optional[Callable[[float], None]] = None
+        self.on_background_visibility_toggle_callback: Optional[Callable[[bool], None]] = None
+        
+        # 背景图 UI 组件引用
+        self.bg_info_label = None
+        self.bg_scale_result_label = None
+        self.bg_ppu_var = None
+        self.bg_ppu_entry = None
+        self.bg_alpha_var = None
+        self.bg_alpha_scale = None
+        self.bg_alpha_label = None
+        self.bg_visible_var = None
+        self.bg_remove_btn = None
         
         self._create_widgets()
         self._bind_events()
@@ -145,6 +162,7 @@ class InputPanel:
         
         # 在滚动框架中创建内容
         self._create_range_section(scrollable_frame)
+        self._create_background_section(scrollable_frame)  # ✨ V2.5 背景户型图设置
         self._create_device_section(scrollable_frame)
         self._create_action_section(scrollable_frame)
     
@@ -323,6 +341,283 @@ class InputPanel:
             foreground='#666666'
         )
         tip_label.pack(pady=(5, 0))
+    
+    def _create_background_section(self, parent):
+        """
+        创建背景户型图设置区域 ✨ V2.5 新增功能
+        
+        Args:
+            parent: 父容器
+        """
+        # 区域标题框架
+        bg_frame = ttk.LabelFrame(
+            parent,
+            text="📷 背景户型图设置",
+            padding=(10, 10)
+        )
+        bg_frame.pack(fill='x', padx=10, pady=5)
+        
+        # === 按钮区域 ===
+        btn_frame = ttk.Frame(bg_frame)
+        btn_frame.pack(fill='x', pady=(0, 10))
+        
+        import_btn = ttk.Button(
+            btn_frame,
+            text="📁 导入户型图",
+            command=self._on_import_background,
+            width=14
+        )
+        import_btn.pack(side='left', padx=(0, 10))
+        
+        self.bg_remove_btn = ttk.Button(
+            btn_frame,
+            text="🗑 移除背景",
+            command=self._on_remove_background,
+            state='disabled',
+            width=12
+        )
+        self.bg_remove_btn.pack(side='left')
+        
+        # === 图片信息区域 ===
+        info_frame = ttk.LabelFrame(bg_frame, text="📐 图片信息", padding=5)
+        info_frame.pack(fill='x', pady=(0, 10))
+        
+        self.bg_info_label = ttk.Label(
+            info_frame,
+            text="未加载图片",
+            foreground='gray',
+            font=('Arial', 9)
+        )
+        self.bg_info_label.pack(anchor='w')
+        
+        # === 比例设置区域 ===
+        scale_frame = ttk.LabelFrame(bg_frame, text="📏 比例设置", padding=5)
+        scale_frame.pack(fill='x', pady=(0, 10))
+        
+        # 比例输入行
+        scale_input_frame = ttk.Frame(scale_frame)
+        scale_input_frame.pack(fill='x', pady=5)
+        
+        ttk.Label(scale_input_frame, text="每", font=('Arial', 10)).pack(side='left')
+        
+        self.bg_ppu_var = tk.StringVar(value="100")
+        self.bg_ppu_entry = ttk.Entry(
+            scale_input_frame,
+            textvariable=self.bg_ppu_var,
+            width=8,
+            justify='center',
+            font=('Arial', 10)
+        )
+        self.bg_ppu_entry.pack(side='left', padx=5)
+        self.bg_ppu_entry.bind('<Return>', self._on_bg_ppu_change)
+        self.bg_ppu_entry.bind('<FocusOut>', self._on_bg_ppu_change)
+        # 绑定点击事件确保获取焦点
+        self.bg_ppu_entry.bind('<Button-1>', lambda e: (self.bg_ppu_entry.focus_set(), 'break')[1])
+        
+        ttk.Label(
+            scale_input_frame,
+            text="像素 = 1 格 (1米)",
+            font=('Arial', 10)
+        ).pack(side='left')
+        
+        # 计算结果显示
+        self.bg_scale_result_label = ttk.Label(
+            scale_frame,
+            text="",
+            foreground='#2e7d32',  # 绿色
+            font=('Arial', 9)
+        )
+        self.bg_scale_result_label.pack(anchor='w', pady=(5, 0))
+        
+        # === 透明度设置 ===
+        alpha_frame = ttk.LabelFrame(bg_frame, text="🎨 显示设置", padding=5)
+        alpha_frame.pack(fill='x', pady=(0, 5))
+        
+        alpha_row = ttk.Frame(alpha_frame)
+        alpha_row.pack(fill='x', pady=5)
+        
+        ttk.Label(alpha_row, text="透明度:", font=('Arial', 10)).pack(side='left')
+        
+        self.bg_alpha_var = tk.DoubleVar(value=0.5)
+        self.bg_alpha_scale = ttk.Scale(
+            alpha_row,
+            from_=0.1, to=1.0,
+            variable=self.bg_alpha_var,
+            orient='horizontal',
+            command=self._on_bg_alpha_change
+        )
+        self.bg_alpha_scale.pack(side='left', fill='x', expand=True, padx=10)
+        
+        self.bg_alpha_label = ttk.Label(alpha_row, text="50%", width=5, font=('Arial', 10))
+        self.bg_alpha_label.pack(side='left')
+        
+        # === 显示开关 ===
+        self.bg_visible_var = tk.BooleanVar(value=True)
+        bg_visible_check = ttk.Checkbutton(
+            alpha_frame,
+            text="显示背景图",
+            variable=self.bg_visible_var,
+            command=self._on_bg_visibility_toggle
+        )
+        bg_visible_check.pack(anchor='w', pady=(5, 0))
+    
+    # === 背景图事件处理方法 ✨ V2.5 ===
+    
+    def _on_import_background(self):
+        """处理导入背景图按钮点击"""
+        from tkinter import filedialog
+        
+        file_path = filedialog.askopenfilename(
+            title="选择户型图",
+            filetypes=[
+                ("图片文件", "*.png *.jpg *.jpeg *.PNG *.JPG *.JPEG"),
+                ("PNG文件", "*.png *.PNG"),
+                ("JPEG文件", "*.jpg *.jpeg *.JPG *.JPEG"),
+                ("所有文件", "*.*")
+            ]
+        )
+        
+        if not file_path:
+            return
+        
+        # 调用回调函数
+        if self.on_background_import_callback:
+            self.on_background_import_callback(file_path)
+    
+    def _on_remove_background(self):
+        """处理移除背景图按钮点击"""
+        if self.on_background_remove_callback:
+            self.on_background_remove_callback()
+        
+        # 重置 UI
+        self._reset_background_ui()
+    
+    def _on_bg_ppu_change(self, event=None):
+        """处理像素比例输入变化"""
+        try:
+            ppu = float(self.bg_ppu_var.get())
+            if ppu <= 0:
+                raise ValueError("比例必须大于0")
+            
+            # 调用回调函数
+            if self.on_background_scale_change_callback:
+                self.on_background_scale_change_callback(ppu)
+                
+        except ValueError as e:
+            print(f"⚠️ 无效的比例值: {e}")
+    
+    def _on_bg_alpha_change(self, value=None):
+        """处理透明度滑块变化"""
+        alpha = self.bg_alpha_var.get()
+        self.bg_alpha_label.config(text=f"{int(alpha * 100)}%")
+        
+        if self.on_background_alpha_change_callback:
+            self.on_background_alpha_change_callback(alpha)
+    
+    def _on_bg_visibility_toggle(self):
+        """处理显示/隐藏切换"""
+        visible = self.bg_visible_var.get()
+        if self.on_background_visibility_toggle_callback:
+            self.on_background_visibility_toggle_callback(visible)
+    
+    def update_background_info(self, pixel_width: int, pixel_height: int, dpi: int,
+                               actual_width: float, actual_height: float,
+                               x_min: float, x_max: float, y_min: float, y_max: float):
+        """
+        更新背景图信息显示
+        
+        Args:
+            pixel_width: 图片宽度（像素）
+            pixel_height: 图片高度（像素）
+            dpi: 图片 DPI
+            actual_width: 实际宽度（米）
+            actual_height: 实际高度（米）
+            x_min, x_max, y_min, y_max: 坐标范围
+        """
+        # 更新图片信息
+        info_text = f"尺寸: {pixel_width} × {pixel_height} 像素\nDPI: {dpi}"
+        self.bg_info_label.config(text=info_text, foreground='black')
+        
+        # 更新比例计算结果
+        result_text = (
+            f"→ 实际尺寸: {actual_width:.1f} 米 × {actual_height:.1f} 米\n"
+            f"→ 坐标范围: X[{x_min:.1f}, {x_max:.1f}]  Y[{y_min:.1f}, {y_max:.1f}]"
+        )
+        self.bg_scale_result_label.config(text=result_text)
+        
+        # 启用移除按钮
+        self.bg_remove_btn.config(state='normal')
+    
+    def _reset_background_ui(self):
+        """重置背景图 UI 到初始状态"""
+        if self.bg_info_label:
+            self.bg_info_label.config(text="未加载图片", foreground='gray')
+        if self.bg_scale_result_label:
+            self.bg_scale_result_label.config(text="")
+        if self.bg_remove_btn:
+            self.bg_remove_btn.config(state='disabled')
+        if self.bg_ppu_var:
+            self.bg_ppu_var.set("100")
+        if self.bg_alpha_var:
+            self.bg_alpha_var.set(0.5)
+        if self.bg_alpha_label:
+            self.bg_alpha_label.config(text="50%")
+        if self.bg_visible_var:
+            self.bg_visible_var.set(True)
+    
+    def set_background_ppu(self, ppu: float):
+        """
+        设置背景图像素比例值（用于项目加载）
+        
+        Args:
+            ppu: 像素比例
+        """
+        if self.bg_ppu_var:
+            self.bg_ppu_var.set(f"{ppu:.1f}")
+    
+    def set_background_alpha(self, alpha: float):
+        """
+        设置背景图透明度（用于项目加载）
+        
+        Args:
+            alpha: 透明度值
+        """
+        if self.bg_alpha_var:
+            self.bg_alpha_var.set(alpha)
+        if self.bg_alpha_label:
+            self.bg_alpha_label.config(text=f"{int(alpha * 100)}%")
+    
+    def set_background_visible(self, visible: bool):
+        """
+        设置背景图显示状态（用于项目加载）
+        
+        Args:
+            visible: 是否显示
+        """
+        if self.bg_visible_var:
+            self.bg_visible_var.set(visible)
+    
+    # === 背景图回调设置方法 ===
+    
+    def set_background_import_callback(self, callback: Callable[[str], None]):
+        """设置背景图导入回调"""
+        self.on_background_import_callback = callback
+    
+    def set_background_remove_callback(self, callback: Callable[[], None]):
+        """设置背景图移除回调"""
+        self.on_background_remove_callback = callback
+    
+    def set_background_scale_change_callback(self, callback: Callable[[float], None]):
+        """设置背景图比例变化回调"""
+        self.on_background_scale_change_callback = callback
+    
+    def set_background_alpha_change_callback(self, callback: Callable[[float], None]):
+        """设置背景图透明度变化回调"""
+        self.on_background_alpha_change_callback = callback
+    
+    def set_background_visibility_toggle_callback(self, callback: Callable[[bool], None]):
+        """设置背景图显示切换回调"""
+        self.on_background_visibility_toggle_callback = callback
     
     def _create_status_indicators(self, parent):
         """

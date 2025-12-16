@@ -15,6 +15,7 @@ from pathlib import Path
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
+from models.background_model import BackgroundImage
 from views.matplotlib_view import MatplotlibView
 from views.input_panel import InputPanel
 from models.device_manager import DeviceManager
@@ -153,6 +154,13 @@ class MatplotlibController:
         # 绑定用户坐标系事件 ✨ 双坐标系功能
         self.input_panel.set_user_coord_toggle_callback(self._on_user_coord_toggle)
         self.input_panel.set_user_position_set_callback(self._on_user_position_set)
+        
+        # 绑定背景图事件 ✨ V2.5 背景户型图功能
+        self.input_panel.set_background_import_callback(self._on_background_import)
+        self.input_panel.set_background_remove_callback(self._on_background_remove)
+        self.input_panel.set_background_scale_change_callback(self._on_background_scale_change)
+        self.input_panel.set_background_alpha_change_callback(self._on_background_alpha_change)
+        self.input_panel.set_background_visibility_toggle_callback(self._on_background_visibility_toggle)
         
         # 初始化设备数据
         self.canvas_view.update_devices(self.device_manager.get_devices())
@@ -294,6 +302,197 @@ class MatplotlibController:
         # 标记项目已修改
         self.project_manager.mark_modified()
         self._update_window_title()
+
+    # === 背景图事件处理 ✨ V2.5 背景户型图功能 ===
+    
+    def _on_background_import(self, file_path: str):
+        """
+        处理背景图导入事件
+        
+        Args:
+            file_path: 图片文件路径
+        """
+        print(f"📂 控制器收到导入背景图请求: {file_path}")
+        
+        # 创建背景图对象并加载
+        bg = BackgroundImage()
+        
+        if bg.load_from_file(file_path):
+            # 获取当前输入面板中的比例设置
+            try:
+                ppu = float(self.input_panel.bg_ppu_var.get())
+                if ppu > 0:
+                    bg.set_pixels_per_unit(ppu)
+            except (ValueError, AttributeError):
+                pass
+            
+            # 获取当前透明度设置
+            try:
+                alpha = self.input_panel.bg_alpha_var.get()
+                bg.set_alpha(alpha)
+            except AttributeError:
+                pass
+            
+            # 设置到视图
+            self.canvas_view.set_background_image(bg)
+            
+            # 更新输入面板信息
+            actual_w, actual_h = bg.get_actual_size()
+            self.input_panel.update_background_info(
+                pixel_width=bg.pixel_width,
+                pixel_height=bg.pixel_height,
+                dpi=bg.dpi,
+                actual_width=actual_w,
+                actual_height=actual_h,
+                x_min=bg.x_min,
+                x_max=bg.x_max,
+                y_min=bg.y_min,
+                y_max=bg.y_max
+            )
+            
+            # 标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
+            
+            print(f"✅ 背景图导入成功: {actual_w:.1f}m × {actual_h:.1f}m")
+        else:
+            messagebox.showerror("导入失败", "无法加载图片文件，请检查文件格式")
+    
+    def _on_background_remove(self):
+        """处理背景图移除事件"""
+        print("🗑️ 控制器收到移除背景图请求")
+        
+        self.canvas_view.remove_background()
+        
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
+    
+    def _on_background_scale_change(self, ppu: float):
+        """
+        处理背景图比例变化事件
+        
+        Args:
+            ppu: 每格像素数
+        """
+        print(f"📏 控制器收到背景图比例变化: {ppu} px/格")
+        
+        if self.canvas_view.update_background_scale(ppu):
+            # 更新输入面板显示
+            bg = self.canvas_view.get_background_image()
+            if bg:
+                actual_w, actual_h = bg.get_actual_size()
+                self.input_panel.update_background_info(
+                    pixel_width=bg.pixel_width,
+                    pixel_height=bg.pixel_height,
+                    dpi=bg.dpi,
+                    actual_width=actual_w,
+                    actual_height=actual_h,
+                    x_min=bg.x_min,
+                    x_max=bg.x_max,
+                    y_min=bg.y_min,
+                    y_max=bg.y_max
+                )
+            
+            # 标记项目已修改
+            self.project_manager.mark_modified()
+            self._update_window_title()
+    
+    def _on_background_alpha_change(self, alpha: float):
+        """
+        处理背景图透明度变化事件
+        
+        Args:
+            alpha: 透明度值
+        """
+        self.canvas_view.update_background_alpha(alpha)
+        
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
+    
+    def _on_background_visibility_toggle(self, visible: bool):
+        """
+        处理背景图显示切换事件
+        
+        Args:
+            visible: 是否显示
+        """
+        self.canvas_view.toggle_background_visibility(visible)
+        
+        # 标记项目已修改
+        self.project_manager.mark_modified()
+        self._update_window_title()
+    
+    # === 背景图公共接口 ===
+    
+    def set_background_image(self, bg_image: BackgroundImage):
+        """
+        设置背景图（供外部调用）
+        
+        Args:
+            bg_image: BackgroundImage 对象
+        """
+        self.canvas_view.set_background_image(bg_image)
+        
+        # 更新输入面板
+        if bg_image and bg_image.is_loaded():
+            actual_w, actual_h = bg_image.get_actual_size()
+            self.input_panel.update_background_info(
+                pixel_width=bg_image.pixel_width,
+                pixel_height=bg_image.pixel_height,
+                dpi=bg_image.dpi,
+                actual_width=actual_w,
+                actual_height=actual_h,
+                x_min=bg_image.x_min,
+                x_max=bg_image.x_max,
+                y_min=bg_image.y_min,
+                y_max=bg_image.y_max
+            )
+            self.input_panel.set_background_ppu(bg_image.pixels_per_unit)
+            self.input_panel.set_background_alpha(bg_image.alpha)
+            self.input_panel.set_background_visible(bg_image.enabled)
+    
+    def get_background_image(self) -> Optional[BackgroundImage]:
+        """
+        获取当前背景图
+        
+        Returns:
+            BackgroundImage 对象
+        """
+        return self.canvas_view.get_background_image()
+    
+    def update_background_scale(self, ppu: float):
+        """
+        更新背景图比例（供外部调用）
+        
+        Args:
+            ppu: 每格像素数
+        """
+        self._on_background_scale_change(ppu)
+    
+    def update_background_alpha(self, alpha: float):
+        """
+        更新背景图透明度（供外部调用）
+        
+        Args:
+            alpha: 透明度值
+        """
+        self._on_background_alpha_change(alpha)
+    
+    def toggle_background_visibility(self, visible: bool):
+        """
+        切换背景图显示（供外部调用）
+        
+        Args:
+            visible: 是否显示
+        """
+        self._on_background_visibility_toggle(visible)
+    
+    def remove_background(self):
+        """移除背景图（供外部调用）"""
+        self._on_background_remove()
+        self.input_panel._reset_background_ui()
 
     # === 设备管理方法 ===
     
@@ -843,13 +1042,17 @@ class MatplotlibController:
             # V2.4: 获取锁定测量数据
             locked_measurement = self.canvas_view.get_locked_measurement()
             
+            # V2.5: 获取背景图数据
+            background_image = self.canvas_view.get_background_image()
+            
             # 保存项目
             success, message = self.project_manager.save_project(
                 file_path,
                 devices,
                 coordinate_settings,
                 user_coord_settings,
-                locked_measurement=locked_measurement
+                locked_measurement=locked_measurement,
+                background_image=background_image
             )
             
             if success:
@@ -937,6 +1140,16 @@ class MatplotlibController:
                 locked_measurement = project_data['locked_measurement_parsed']
                 self.canvas_view.set_locked_measurement(locked_measurement)
                 print(f"📍 恢复锁定测量数据: {locked_measurement}")
+            
+            # V2.5: 恢复背景图数据
+            if 'background_image_parsed' in project_data:
+                background_image = project_data['background_image_parsed']
+                self.set_background_image(background_image)
+                print(f"🖼️ 恢复背景图数据")
+            else:
+                # 清除可能存在的旧背景图
+                self.canvas_view.remove_background()
+                self.input_panel._reset_background_ui()
             
             # 添加到最近文件
             self.config_manager.add_recent_file(file_path)

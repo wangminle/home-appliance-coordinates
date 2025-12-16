@@ -24,6 +24,7 @@ import matplotlib.patches as patches
 from models.scene_model import SceneModel, SectorData, MeasurementData, LabelPosition
 from models.coordinate_frame import CoordinateFrame
 from models.device_model import Device
+from models.background_model import BackgroundImage
 
 # 导入新的标签布局服务
 from services.label_placer import LabelPlacer, DeviceAnchor, SectorObstacle
@@ -89,6 +90,7 @@ class SceneRenderer:
         
         # 按类别管理绑制对象（用于清除和更新）
         self._artists: Dict[str, List[Artist]] = {
+            'background': [],  # ✨ V2.5 背景户型图
             'coordinate_system': [],
             'user_coordinate_system': [],
             'devices': [],
@@ -98,6 +100,10 @@ class SceneRenderer:
             'coordinate_info': [],
             'drag_highlight': [],  # 拖拽高亮效果
         }
+        
+        # ✨ V2.5 背景图数据
+        self.background_image: Optional[BackgroundImage] = None
+        self.background_artist = None
         
         # 标签位置到element_id的映射（用于拖拽检测）
         self._label_hitboxes: Dict[str, BoundingBox] = {}
@@ -125,6 +131,76 @@ class SceneRenderer:
         
         print("✅ SceneRenderer 初始化完成（V2.1 拖拽支持版）")
     
+    # ==================== V2.5 背景图方法 ====================
+    
+    def set_background_image(self, bg_image: BackgroundImage):
+        """
+        设置背景户型图
+        
+        Args:
+            bg_image: 背景图数据对象
+        """
+        self.background_image = bg_image
+        self._draw_background()
+    
+    def _draw_background(self):
+        """绘制背景户型图"""
+        # 清除之前的背景图
+        self._clear_category('background')
+        
+        if not self.background_image or not self.background_image.is_valid():
+            return
+        
+        bg = self.background_image
+        
+        # 使用 imshow 绘制背景图
+        artist = self.axes.imshow(
+            bg.image_data,
+            extent=[bg.x_min, bg.x_max, bg.y_min, bg.y_max],
+            alpha=bg.alpha,
+            zorder=0,       # 最底层
+            aspect='auto',
+            origin='upper'
+        )
+        
+        self._artists['background'].append(artist)
+        self.background_artist = artist
+        
+        actual_w, actual_h = bg.get_actual_size()
+        print(f"🖼️ SceneRenderer: 背景图已绘制 ({actual_w:.1f}m × {actual_h:.1f}m)")
+    
+    def update_background_alpha(self, alpha: float):
+        """更新背景图透明度"""
+        if self.background_image:
+            self.background_image.set_alpha(alpha)
+            if self.background_artist:
+                self.background_artist.set_alpha(alpha)
+    
+    def toggle_background_visibility(self, visible: bool):
+        """切换背景图显示/隐藏"""
+        if self.background_image:
+            self.background_image.set_enabled(visible)
+            if visible:
+                self._draw_background()
+            else:
+                self._clear_category('background')
+    
+    def remove_background(self):
+        """移除背景图"""
+        self._clear_category('background')
+        if self.background_image:
+            self.background_image.clear()
+        self.background_image = None
+        self.background_artist = None
+    
+    def has_background_image(self) -> bool:
+        """检查是否有背景图"""
+        return self.background_image is not None and self.background_image.is_loaded()
+    
+    def get_background_image(self) -> Optional[BackgroundImage]:
+        """获取当前背景图数据"""
+        return self.background_image
+    
     # ==================== 主渲染方法 ====================
     
     def render(self, model: SceneModel):
@@ -144,6 +220,9 @@ class SceneRenderer:
         
         # 获取坐标范围
         x_range, y_range = model.coord_range
+        
+        # ✨ V2.5 先绘制背景图（最底层 zorder=0）
+        self._draw_background()
         
         # 绑制坐标系统
         self._draw_coordinate_system(x_range, y_range)

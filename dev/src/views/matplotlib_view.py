@@ -24,6 +24,7 @@ plt.rcParams['axes.unicode_minus'] = False
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
 from models.locked_measurement import LockedMeasurement
+from models.background_model import BackgroundImage
 # 使用新的高性能布局管理器
 from utils.fast_layout import FastLayoutManager, LayoutElement, ElementType, BoundingBox
 
@@ -124,6 +125,10 @@ class MatplotlibView:
         self.pin_position = None           # 图钉位置 (x, y)
         self.toast_artist = None           # Toast 提示对象
         self.toast_timer_id = None         # Toast 定时器 ID
+        
+        # ✨ V2.5 背景户型图功能
+        self.background_image: Optional[BackgroundImage] = None  # 背景图数据模型
+        self.background_artist = None      # imshow 返回的 AxesImage 对象
         
         # ✨ 高性能布局管理器（替代adjustText主要功能）
         self.fast_layout_manager: Optional[FastLayoutManager] = None
@@ -227,7 +232,10 @@ class MatplotlibView:
         # 设置相等的宽高比
         self.axes.set_aspect('equal', adjustable='box')
         
-        # 说明：原点的“大蓝点”已移除（用户反馈：原始坐标系无需额外强调原点）
+        # 说明：原点的"大蓝点"已移除（用户反馈：原始坐标系无需额外强调原点）
+        
+        # ✨ V2.5 重新绘制背景图（如果有）
+        self._draw_background()
         
         print(f"✅ 坐标系统设置完成: ±{x_range} x ±{y_range}")
     
@@ -2126,3 +2134,129 @@ class MatplotlibView:
             
             self._show_toast("用户位置已更改，扇形自动解锁")
             print("🔓 用户坐标系切换，扇形自动解锁")
+    
+    # ==================== V2.5 背景户型图功能 ====================
+    
+    def set_background_image(self, bg_image: BackgroundImage):
+        """
+        设置背景户型图
+        
+        Args:
+            bg_image: 背景图数据对象
+        """
+        self.background_image = bg_image
+        self._draw_background()
+        self.canvas.draw_idle()
+        print(f"✅ 背景户型图已设置")
+    
+    def update_background_scale(self, pixels_per_unit: float) -> bool:
+        """
+        更新背景图比例（响应用户输入）
+        
+        Args:
+            pixels_per_unit: 每格对应的像素数
+            
+        Returns:
+            是否更新成功
+        """
+        if not self.background_image:
+            return False
+        
+        success = self.background_image.set_pixels_per_unit(pixels_per_unit)
+        if success:
+            self._draw_background()
+            self.canvas.draw_idle()
+        return success
+    
+    def _draw_background(self):
+        """
+        绘制背景户型图（内部方法）
+        
+        背景图始终在最底层（zorder=0），确保不遮挡其他元素
+        """
+        # 清除之前的背景图
+        self._clear_background()
+        
+        if not self.background_image or not self.background_image.is_valid():
+            return
+        
+        bg = self.background_image
+        
+        # 使用 imshow 绘制背景图（中心对齐的坐标范围）
+        self.background_artist = self.axes.imshow(
+            bg.image_data,
+            extent=[bg.x_min, bg.x_max, bg.y_min, bg.y_max],
+            alpha=bg.alpha,
+            zorder=0,       # 最底层
+            aspect='auto',  # 自动调整宽高比
+            origin='upper'  # 图片原点在左上角
+        )
+        
+        actual_w, actual_h = bg.get_actual_size()
+        print(f"🖼️ 背景户型图已绑制: {actual_w:.1f}m × {actual_h:.1f}m, alpha={bg.alpha}")
+    
+    def _clear_background(self):
+        """清除背景图"""
+        if self.background_artist:
+            try:
+                self.background_artist.remove()
+            except (ValueError, AttributeError):
+                pass
+            self.background_artist = None
+    
+    def update_background_alpha(self, alpha: float):
+        """
+        更新背景图透明度
+        
+        Args:
+            alpha: 透明度值 (0.0-1.0)
+        """
+        if self.background_image:
+            self.background_image.set_alpha(alpha)
+            if self.background_artist:
+                self.background_artist.set_alpha(alpha)
+                self.canvas.draw_idle()
+                print(f"🎨 背景图透明度更新: {int(alpha * 100)}%")
+    
+    def toggle_background_visibility(self, visible: bool):
+        """
+        切换背景图显示/隐藏
+        
+        Args:
+            visible: True 显示，False 隐藏
+        """
+        if self.background_image:
+            self.background_image.set_enabled(visible)
+            if visible:
+                self._draw_background()
+            else:
+                self._clear_background()
+            self.canvas.draw_idle()
+            print(f"👁️ 背景图显示: {'开启' if visible else '关闭'}")
+    
+    def remove_background(self):
+        """移除背景图"""
+        self._clear_background()
+        if self.background_image:
+            self.background_image.clear()
+        self.background_image = None
+        self.canvas.draw_idle()
+        print("🗑️ 背景图已移除")
+    
+    def get_background_image(self) -> Optional[BackgroundImage]:
+        """
+        获取当前背景图数据
+        
+        Returns:
+            BackgroundImage 对象，如果没有则返回 None
+        """
+        return self.background_image
+    
+    def has_background_image(self) -> bool:
+        """
+        检查是否有背景图
+        
+        Returns:
+            True 表示有背景图
+        """
+        return self.background_image is not None and self.background_image.is_loaded()

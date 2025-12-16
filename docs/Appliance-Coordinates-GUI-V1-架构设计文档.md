@@ -1,4 +1,4 @@
-# 家居设备坐标距离角度绘制工具 - 架构设计文档 V2.3
+# 家居设备坐标距离角度绘制工具 - 架构设计文档 V2.5
 
 ## 1. 项目概述
 
@@ -15,15 +15,17 @@
 - 坐标系范围自定义
 - 高清多格式导出功能（PNG/SVG/PDF）
 - **智能标签布局**: 力导向算法实现标签自动避让 🆕 V2.3新增
+- **背景户型图导入**: 支持PNG/JPG户型图作为背景参考 🆕 V2.5新增
 
 ## 2. 技术架构
 
-### 2.1 技术栈（Matplotlib版本 V2.3）
+### 2.1 技术栈（Matplotlib版本 V2.5）
 
 - **编程语言**: Python 3.12
 - **GUI框架**: Tkinter (Python标准库)
 - **图形绘制**: Matplotlib + FigureCanvasTkAgg
 - **数值计算**: NumPy 1.24+
+- **图像处理**: Pillow 10.0+ (背景图加载) 🆕 V2.5
 - **布局算法**: FastLayoutManager (力导向/模拟退火)
 - **依赖管理**: pipenv
 - **图像导出**: Matplotlib原生导出（PNG/SVG/PDF）
@@ -73,7 +75,8 @@
 │   ├── coordinate_frame.py     # 坐标框架模型
 │   ├── user_position_model.py  # 用户位置模型 ✨ 双坐标系核心
 │   ├── measurement_model.py    # 测量点模型
-│   └── scene_model.py          # 场景模型 🆕 (标签位置管理)
+│   ├── scene_model.py          # 场景模型 🆕 (标签位置管理)
+│   └── background_model.py     # 背景户型图模型 🆕 V2.5
 ├── views/
 │   ├── __init__.py
 │   ├── main_window.py          # 主窗口视图
@@ -278,6 +281,55 @@ class MeasurementPoint:
             self.user_x, self.user_y = user_position.world_to_user_coords(x, y)
             self.distance_to_user = user_position.calculate_user_distance(x, y)
             self.angle_to_user = self._calculate_user_angle()
+```
+
+### 3.7 背景户型图数据模型 🆕 V2.5新增
+
+```python
+class BackgroundImage:
+    """
+    背景户型图数据模型
+    管理户型图的加载、像素比例映射、透明度控制和持久化
+    """
+    
+    def __init__(self):
+        # 图片数据
+        self.image_path: Optional[str] = None      # 图片文件路径
+        self.image_data: Optional[np.ndarray] = None  # PIL图片的numpy数组
+        self.pixel_width: int = 0                   # 图片像素宽度
+        self.pixel_height: int = 0                  # 图片像素高度
+        self.dpi: int = 96                          # 图片DPI
+        
+        # 比例映射参数
+        self.pixels_per_unit: float = 100.0         # 每坐标单位对应的像素数
+        
+        # 显示参数
+        self.alpha: float = 0.5                     # 透明度 (0.0-1.0)
+        self.enabled: bool = True                   # 是否启用显示
+        
+        # 计算后的坐标范围（中心对齐）
+        self.x_min: float = 0.0
+        self.x_max: float = 0.0
+        self.y_min: float = 0.0
+        self.y_max: float = 0.0
+    
+    # 核心方法
+    def load_image(file_path: str) -> bool
+    def set_pixels_per_unit(pixels_per_unit: float) -> bool
+    def set_alpha(alpha: float) -> None
+    def set_enabled(enabled: bool) -> None
+    def clear() -> None
+    
+    # 状态查询
+    def is_valid() -> bool
+    def is_loaded() -> bool
+    def get_actual_size() -> Tuple[float, float]
+    def get_extent() -> Tuple[float, float, float, float]
+    def get_info_text() -> str
+    
+    # 序列化
+    def to_dict(embed_image: bool = True) -> dict
+    def from_dict(cls, data: dict) -> 'BackgroundImage'
 ```
 
 ## 4. 布局算法架构 🆕 V2.3核心
@@ -632,7 +684,7 @@ Matplotlib V2.3版本的实现完全超越了原有方案：
 - 更专业的输出质量
 - 更智能的标签布局
 
-### 10.2 V2.3版本核心创新 🆕
+### 10.2 V2.3版本核心创新
 
 - **力导向布局算法**: FastLayoutManager实现智能标签避让
 - **4方向布局策略**: 顺时针避让（左→上→右→下）
@@ -641,13 +693,24 @@ Matplotlib V2.3版本的实现完全超越了原有方案：
 - **虚线引导线**: 增强标签与设备的视觉关联
 - **三重碰撞检测**: 扇形、标签、设备全方位检测
 
-### 10.3 架构价值体现
+### 10.3 V2.5版本核心创新 🆕
+
+- **背景户型图导入**: 支持PNG/JPG格式户型图作为背景参考
+- **像素比例映射**: 通过"每X像素=1米"设置图片实际尺寸
+- **中心对齐**: 背景图自动居中显示在坐标原点
+- **透明度调节**: 滑块控制10%-100%透明度
+- **显示切换**: 可随时隐藏/显示背景图
+- **项目持久化**: 背景图通过Base64嵌入项目文件，确保可移植性
+- **图层管理**: zorder分层确保背景图始终在最底层
+
+### 10.4 架构价值体现
 
 - **MVC架构**: 完整的三层分离设计
 - **DeviceManager**: 统一数据管理创新
 - **UserPosition**: 双坐标系功能的数据模型核心
 - **FastLayoutManager**: 高性能布局算法核心
 - **SceneModel**: 场景状态统一管理
+- **BackgroundImage**: 背景户型图数据模型 🆕 V2.5
 - **服务层设计**: 碰撞检测和标签放置解耦
 
-这个项目成功展示了如何将传统GUI应用升级为现代化的科学计算应用，特别是V2.3版本的智能标签布局功能，为复杂场景下的信息可视化提供了优秀的解决方案。
+这个项目成功展示了如何将传统GUI应用升级为现代化的科学计算应用。V2.3版本的智能标签布局功能为复杂场景下的信息可视化提供了优秀的解决方案，V2.5版本新增的背景户型图功能则让用户能够更直观地在真实户型图上规划设备布局。

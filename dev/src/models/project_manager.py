@@ -13,6 +13,7 @@ from datetime import datetime
 from pathlib import Path
 from models.device_model import Device
 from models.locked_measurement import LockedMeasurement
+from models.background_model import BackgroundImage
 
 
 class ProjectManagerError(Exception):
@@ -92,12 +93,14 @@ class ProjectManager:
                     user_coord_settings: Optional[Dict[str, Any]] = None,
                     project_info: Optional[Dict[str, str]] = None,
                     label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
-                    locked_measurement: Optional[LockedMeasurement] = None) -> Tuple[bool, str]:
+                    locked_measurement: Optional[LockedMeasurement] = None,
+                    background_image: Optional[BackgroundImage] = None) -> Tuple[bool, str]:
         """
         保存项目到JSON文件
         
         V2.1: 添加标签位置持久化支持
         V2.4: 添加锁定扇形数据持久化支持
+        V2.5: 添加背景图持久化支持
         
         Args:
             file_path: 保存路径
@@ -107,6 +110,7 @@ class ProjectManager:
             project_info: 项目信息（可选）
             label_positions: 标签位置字典（可选，仅保存手动位置）
             locked_measurement: 锁定测量数据（可选）V2.4新增
+            background_image: 背景图数据（可选）V2.5新增
             
         Returns:
             (成功标志, 消息)
@@ -119,7 +123,8 @@ class ProjectManager:
                 user_coord_settings,
                 project_info,
                 label_positions,
-                locked_measurement
+                locked_measurement,
+                background_image
             )
             
             # 验证数据
@@ -265,6 +270,12 @@ class ProjectManager:
                 project_data['locked_measurement_parsed'] = LockedMeasurement.from_dict(locked_data)
                 status = "🔒锁定" if locked_data.get('is_locked', False) else "🔓解锁"
                 print(f"📍 加载锁定测量数据 ({status})")
+            
+            # V2.5: 解析背景图数据（如果有）
+            if 'background_image' in project_data:
+                bg_data = project_data['background_image']
+                project_data['background_image_parsed'] = BackgroundImage.from_dict(bg_data)
+                print(f"🖼️ 加载背景图数据")
             
             # 更新项目状态
             self.set_project_path(str(file_path_obj))
@@ -420,12 +431,14 @@ class ProjectManager:
                            user_coord_settings: Optional[Dict[str, Any]] = None,
                            project_info: Optional[Dict[str, str]] = None,
                            label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
-                           locked_measurement: Optional[LockedMeasurement] = None) -> Dict[str, Any]:
+                           locked_measurement: Optional[LockedMeasurement] = None,
+                           background_image: Optional[BackgroundImage] = None) -> Dict[str, Any]:
         """
         构建项目数据结构
         
         V2.1: 添加标签位置持久化支持
         V2.4: 添加锁定扇形数据持久化支持
+        V2.5: 添加背景图持久化支持
         
         Args:
             devices: 设备列表
@@ -434,6 +447,7 @@ class ProjectManager:
             project_info: 项目信息
             label_positions: 标签位置字典（仅保存手动位置）
             locked_measurement: 锁定测量数据（V2.4新增）
+            background_image: 背景图数据（V2.5新增）
             
         Returns:
             项目数据字典
@@ -498,6 +512,12 @@ class ProjectManager:
             project_data['locked_measurement'] = locked_measurement.to_dict()
             status = "🔒锁定" if locked_measurement.is_locked else "🔓解锁"
             print(f"📍 保存锁定测量数据 ({status})")
+        
+        # V2.5: 添加背景图数据
+        if background_image and background_image.is_loaded():
+            project_data['background_image'] = background_image.to_dict(embed_image=True)
+            actual_w, actual_h = background_image.get_actual_size()
+            print(f"🖼️ 保存背景图数据: {actual_w:.1f}m × {actual_h:.1f}m")
         
         return project_data
     
