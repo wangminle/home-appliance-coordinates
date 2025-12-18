@@ -15,6 +15,74 @@ import math
 import time
 import random
 
+
+# ==================== 布局算法常量定义 ====================
+
+class LayoutConstants:
+    """
+    布局算法常量定义
+    
+    将魔法数字提取为命名常量，便于理解和维护
+    """
+    
+    # ---------- 几何阈值常量 ----------
+    NEAR_ZERO_THRESHOLD = 0.01          # 判断是否在圆心/原点附近的阈值
+    FLOAT_TOLERANCE = 0.01              # 浮点数比较容差
+    
+    # ---------- 扇形斥力场参数 ----------
+    SECTOR_CENTER_REPULSION = 20.0      # 圆心处斥力强度（随机方向弹开）
+    SECTOR_BASE_REPULSION = 15.0        # 扇形内基础斥力强度
+    SECTOR_PENETRATION_FACTOR = 30.0    # 扇形内渗透斥力增强系数
+    SECTOR_WARNING_MARGIN = 1.0         # 扇形边界警戒距离
+    SECTOR_BOUNDARY_REPULSION = 8.0     # 扇形边界斥力强度
+    SECTOR_PENALTY_PENETRATION_FACTOR = 2.0  # 扇形惩罚渗透增强系数
+    SECTOR_MARGIN_PENALTY_FACTOR = 0.5  # 扇形边界惩罚系数
+    
+    # ---------- 距离惩罚参数 ----------
+    # 正常情况下的距离惩罚阈值和系数
+    DISTANCE_FAR_THRESHOLD = 1.8        # 远距离阈值
+    DISTANCE_FAR_PENALTY = 50.0         # 远距离惩罚系数
+    DISTANCE_MID_THRESHOLD = 1.5        # 中距离阈值
+    DISTANCE_MID_PENALTY = 15.0         # 中距离惩罚系数
+    DISTANCE_NEAR_THRESHOLD = 1.2       # 近距离阈值
+    DISTANCE_NEAR_PENALTY = 3.0         # 近距离惩罚系数
+    # 扇形区域内的距离惩罚（放宽）
+    SECTOR_DISTANCE_THRESHOLD = 2.5     # 扇形区域距离阈值
+    SECTOR_DISTANCE_PENALTY = 20.0      # 扇形区域距离惩罚系数
+    
+    # ---------- 边界惩罚参数 ----------
+    CANVAS_MARGIN = 0.5                 # 画布边界余量
+    BOUNDARY_START_RATIO = 0.6          # 边界惩罚起始比例（距中心60%开始惩罚）
+    BOUNDARY_PENALTY_MULTIPLIER = 2     # 边界惩罚倍数
+    
+    # ---------- 间距和重叠参数 ----------
+    SPACING_MULTIPLIER = 3              # 间距检测倍数
+    SPACING_PENALTY = 2.0               # 间距不足惩罚系数
+    
+    # ---------- 力导向布局参数 ----------
+    REPULSION_STRENGTH = 0.3            # 元素间排斥力强度
+    ANCHOR_ATTRACTION = 0.2             # 锚点吸引力强度
+    DAMPING = 0.85                      # 阻尼系数
+    OVERLAP_REPULSION_MULTIPLIER = 3.0  # 重叠时排斥力倍数
+    MIN_DISTANCE_CLAMP = 0.1            # 最小距离钳制值（防除零）
+    PROXIMITY_THRESHOLD = 2.0           # 接近距离阈值
+    PROXIMITY_REPULSION_FACTOR = 0.5    # 接近时排斥力系数
+    ANCHOR_TRIGGER_DISTANCE = 0.5       # 触发锚点吸引的距离阈值
+    SECTOR_ATTRACTION_REDUCTION = 0.3   # 扇形内吸引力减弱系数
+    
+    # ---------- 模拟退火参数 ----------
+    TEMPERATURE_THRESHOLD_MULTIPLIER = 2    # 温度阈值倍数（控制扰动触发）
+    PERTURBATION_STRENGTH = 0.3             # 扰动强度系数
+    BASE_MAX_MOVE = 0.5                     # 基础最大移动距离
+    TEMPERATURE_MOVE_FACTOR = 0.3           # 温度对移动的影响系数
+    CONVERGENCE_TEMP_MULTIPLIER = 3         # 收敛判断温度倍数
+    CONVERGENCE_MOVEMENT_THRESHOLD = 0.01   # 收敛判断移动阈值
+    
+    # ---------- 默认位置参数 ----------
+    DEFAULT_OFFSET_X = 1.2              # 默认X偏移量
+    DEFAULT_OFFSET_Y = 0.8              # 默认Y偏移量
+    POSITION_CHANGE_LOG_THRESHOLD = 0.3 # 位置变化日志阈值
+
 class ElementType(Enum):
     """元素类型枚举"""
     DEVICE_INFO = "device_info"
@@ -72,7 +140,7 @@ class SectorRegion:
             return False
         
         # 🆕 特殊情况：圆心点始终在扇形内
-        if distance < 0.01:
+        if distance < LayoutConstants.NEAR_ZERO_THRESHOLD:
             return True
         
         # 计算点相对于圆心的角度
@@ -118,11 +186,11 @@ class SectorRegion:
         dy = y - self.center_y
         distance = math.sqrt(dx*dx + dy*dy)
         
-        if distance < 0.01:
+        if distance < LayoutConstants.NEAR_ZERO_THRESHOLD:
             # 在圆心附近，向随机方向弹开
-            import random
             angle = random.random() * 2 * math.pi
-            return (math.cos(angle) * 20.0, math.sin(angle) * 20.0)
+            return (math.cos(angle) * LayoutConstants.SECTOR_CENTER_REPULSION, 
+                    math.sin(angle) * LayoutConstants.SECTOR_CENTER_REPULSION)
         
         # 归一化方向向量（指向外部）
         dir_x = dx / distance
@@ -134,13 +202,14 @@ class SectorRegion:
         if self.contains_point(x, y):
             # 🆕 在扇形内：超强斥力，确保标签被弹出
             penetration_ratio = 1.0 - (distance / self.radius)
-            force_strength = 15.0 + penetration_ratio * 30.0  # 大幅增强斥力
+            force_strength = (LayoutConstants.SECTOR_BASE_REPULSION + 
+                            penetration_ratio * LayoutConstants.SECTOR_PENETRATION_FACTOR)
         else:
             # 在扇形外但靠近边界：中等斥力
-            margin = 1.0  # 🆕 扩大警戒距离
+            margin = LayoutConstants.SECTOR_WARNING_MARGIN
             if distance < self.radius + margin:
                 closeness = 1.0 - ((distance - self.radius) / margin) if distance > self.radius else 1.0
-                force_strength = closeness * 8.0  # 🆕 增强边界斥力
+                force_strength = closeness * LayoutConstants.SECTOR_BOUNDARY_REPULSION
         
         return (dir_x * force_strength, dir_y * force_strength)
 
@@ -390,16 +459,18 @@ class FastLayoutManager:
                 dy = y - sector.center_y
                 distance = math.sqrt(dx*dx + dy*dy)
                 penetration_ratio = 1.0 - (distance / sector.radius) if sector.radius > 0 else 1.0
-                total_penalty += self.sector_penalty * (1.0 + penetration_ratio * 2.0)
+                total_penalty += self.sector_penalty * (1.0 + penetration_ratio * LayoutConstants.SECTOR_PENALTY_PENETRATION_FACTOR)
             else:
                 # 在扇形外：检查边界距离，给予警戒区惩罚
                 dx = x - sector.center_x
                 dy = y - sector.center_y
                 distance = math.sqrt(dx*dx + dy*dy)
                 
-                # 🆕 扩大警戒距离，从0.5增加到1.0
-                if distance < sector.radius + 1.0:  # 靠近扇形边界
-                    margin_penalty = (sector.radius + 1.0 - distance) * self.sector_penalty * 0.5
+                # 扩大警戒距离
+                warning_margin = LayoutConstants.SECTOR_WARNING_MARGIN
+                if distance < sector.radius + warning_margin:  # 靠近扇形边界
+                    margin_penalty = ((sector.radius + warning_margin - distance) * 
+                                     self.sector_penalty * LayoutConstants.SECTOR_MARGIN_PENALTY_FACTOR)
                     total_penalty += margin_penalty
         
         return total_penalty
@@ -804,8 +875,9 @@ class FastLayoutManager:
         # 只在显著调整时输出日志
         if preferred_offset:
             original_pos = (anchor_x + preferred_offset[0], anchor_y + preferred_offset[1])
-            if (abs(best_position[0] - original_pos[0]) > 0.3 or 
-                abs(best_position[1] - original_pos[1]) > 0.3):
+            log_threshold = LayoutConstants.POSITION_CHANGE_LOG_THRESHOLD
+            if (abs(best_position[0] - original_pos[0]) > log_threshold or 
+                abs(best_position[1] - original_pos[1]) > log_threshold):
                 print(f"🚀 高性能避让: {element_type.value} 位置优化 (评分:{best_score:.1f})")
         
         return best_position
@@ -819,17 +891,17 @@ class FastLayoutManager:
         
         # 根据锚点位置选择默认偏移
         if anchor_x < 0:
-            offset_x = 1.2  # 左侧锚点，信息框放右边
+            offset_x = LayoutConstants.DEFAULT_OFFSET_X  # 左侧锚点，信息框放右边
         else:
-            offset_x = -1.2  # 右侧锚点，信息框放左边
+            offset_x = -LayoutConstants.DEFAULT_OFFSET_X  # 右侧锚点，信息框放左边
         
-        offset_y = 0.8  # 默认向上偏移
+        offset_y = LayoutConstants.DEFAULT_OFFSET_Y  # 默认向上偏移
         
         return (anchor_x + offset_x, anchor_y + offset_y)
     
     def _is_within_canvas(self, box: BoundingBox) -> bool:
         """快速边界检查 - 更严格的边界约束"""
-        margin = 0.5  # 增加边界余量，避免标签过于接近边界
+        margin = LayoutConstants.CANVAS_MARGIN  # 边界余量，避免标签过于接近边界
         return (box.x_min >= self.canvas_bounds.x_min + margin and
                 box.x_max <= self.canvas_bounds.x_max - margin and
                 box.y_min >= self.canvas_bounds.y_min + margin and
@@ -867,8 +939,9 @@ class FastLayoutManager:
             else:
                 # 距离奖励：距离太近时轻微惩罚（鼓励紧凑但不重叠的布局）
                 distance = candidate_box.distance_to(existing_box)
-                if distance < self.min_spacing * 3:
-                    score += max(0, (self.min_spacing * 3 - distance)) * 2.0
+                spacing_threshold = self.min_spacing * LayoutConstants.SPACING_MULTIPLIER
+                if distance < spacing_threshold:
+                    score += max(0, (spacing_threshold - distance)) * LayoutConstants.SPACING_PENALTY
         
         # 🎯 距离锚点的惩罚（核心优化）
         if anchor_x is not None and anchor_y is not None:
@@ -878,16 +951,16 @@ class FastLayoutManager:
             # 🆕 如果在扇形内，放宽距离惩罚（允许标签远离以避开扇形）
             if sector_penalty > 0:
                 # 在扇形区域内，放宽距离限制
-                if anchor_distance > 2.5:
-                    score += (anchor_distance - 2.5) * 20.0
+                if anchor_distance > LayoutConstants.SECTOR_DISTANCE_THRESHOLD:
+                    score += (anchor_distance - LayoutConstants.SECTOR_DISTANCE_THRESHOLD) * LayoutConstants.SECTOR_DISTANCE_PENALTY
             else:
-                # 正常距离惩罚
-                if anchor_distance > 1.8:
-                    score += (anchor_distance - 1.8) * 50.0
-                elif anchor_distance > 1.5:
-                    score += (anchor_distance - 1.5) * 15.0
-                elif anchor_distance > 1.2:
-                    score += (anchor_distance - 1.2) * 3.0
+                # 正常距离惩罚（分层递减）
+                if anchor_distance > LayoutConstants.DISTANCE_FAR_THRESHOLD:
+                    score += (anchor_distance - LayoutConstants.DISTANCE_FAR_THRESHOLD) * LayoutConstants.DISTANCE_FAR_PENALTY
+                elif anchor_distance > LayoutConstants.DISTANCE_MID_THRESHOLD:
+                    score += (anchor_distance - LayoutConstants.DISTANCE_MID_THRESHOLD) * LayoutConstants.DISTANCE_MID_PENALTY
+                elif anchor_distance > LayoutConstants.DISTANCE_NEAR_THRESHOLD:
+                    score += (anchor_distance - LayoutConstants.DISTANCE_NEAR_THRESHOLD) * LayoutConstants.DISTANCE_NEAR_PENALTY
         
         # 边界惩罚：离边界太近的位置（更严格）
         canvas_center_x = (self.canvas_bounds.x_min + self.canvas_bounds.x_max) / 2
@@ -900,20 +973,29 @@ class FastLayoutManager:
         center_distance_x = abs(box_center_x - canvas_center_x) / (canvas_width / 2)
         center_distance_y = abs(box_center_y - canvas_center_y) / (canvas_height / 2)
         
-        # 🎯 更严格的边界惩罚：从60%开始惩罚（而不是75%）
-        if center_distance_x > 0.6:
-            score += (center_distance_x - 0.6) * self.boundary_penalty * 2
-        if center_distance_y > 0.6:
-            score += (center_distance_y - 0.6) * self.boundary_penalty * 2
+        # 🎯 更严格的边界惩罚：从60%开始惩罚
+        boundary_start = LayoutConstants.BOUNDARY_START_RATIO
+        if center_distance_x > boundary_start:
+            score += (center_distance_x - boundary_start) * self.boundary_penalty * LayoutConstants.BOUNDARY_PENALTY_MULTIPLIER
+        if center_distance_y > boundary_start:
+            score += (center_distance_y - boundary_start) * self.boundary_penalty * LayoutConstants.BOUNDARY_PENALTY_MULTIPLIER
         
         return score
     
     def get_layout_statistics(self) -> Dict[str, any]:
-        """获取布局统计信息（用于调试和优化）"""
+        """
+        获取布局统计信息（用于调试和优化）
+        
+        性能说明:
+            时间复杂度: O(n²)，其中 n 为元素数量
+            此方法用于调试目的，不应在性能敏感路径中频繁调用。
+            对于大量元素（n > 100），考虑使用空间分区数据结构优化。
+        """
         if not self.elements:
             return {"total_elements": 0, "overlaps": 0, "cache_size": 0}
         
         # 计算重叠数量
+        # 注意: 双重循环 O(n²) 复杂度，仅用于调试统计
         overlap_count = 0
         for i, elem1 in enumerate(self.elements):
             for elem2 in self.elements[i+1:]:
@@ -991,14 +1073,28 @@ class FastLayoutManager:
         Args:
             layer_elements: 当前层的元素列表
             iterations: 迭代次数
+        
+        性能说明:
+            时间复杂度: O(iterations × m × n)，其中 m 为层内元素数，n 为总元素数
+            在最坏情况下约为 O(n²) 每次迭代。
+            
+            优化策略:
+            1. 分层计算减少每层的元素数量
+            2. 早期收敛退出减少迭代次数
+            3. 模拟退火避免陷入局部最优
+            
+            对于大规模数据（n > 50），可考虑:
+            - 使用四叉树进行空间分区
+            - 只计算邻近元素间的斥力
+            - 并行计算各元素的力
         """
         if not layer_elements:
             return
         
-        # 力导向参数
-        repulsion_strength = 0.3  # 排斥力强度
-        anchor_attraction = 0.2   # 锚点吸引力强度
-        damping = 0.85            # 阻尼系数
+        # 力导向参数（使用常量）
+        repulsion_strength = LayoutConstants.REPULSION_STRENGTH  # 排斥力强度
+        anchor_attraction = LayoutConstants.ANCHOR_ATTRACTION    # 锚点吸引力强度
+        damping = LayoutConstants.DAMPING                        # 阻尼系数
         
         # 🆕 模拟退火参数
         temperature = self.initial_temperature
@@ -1022,6 +1118,8 @@ class FastLayoutManager:
                 force_y += sector_force_y
                 
                 # 计算排斥力（来自所有元素，包括已固定的）
+                # 注意: 此内循环遍历所有元素，构成 O(n) 复杂度
+                # 未来优化方向: 使用空间分区只检测邻近元素
                 for other in self.elements:
                     if other is element:
                         continue
@@ -1030,8 +1128,8 @@ class FastLayoutManager:
                     dy = element.current_y - other.current_y
                     dist = math.sqrt(dx*dx + dy*dy)
                     
-                    if dist < 0.01:
-                        dist = 0.01
+                    if dist < LayoutConstants.NEAR_ZERO_THRESHOLD:
+                        dist = LayoutConstants.NEAR_ZERO_THRESHOLD
                     
                     # 检查是否有重叠
                     elem_bbox = self._get_bbox_at_position(element, element.current_x, element.current_y)
@@ -1039,12 +1137,13 @@ class FastLayoutManager:
                     
                     if elem_bbox.overlaps(other_bbox):
                         # 有重叠时，施加较强的排斥力
-                        repulsion = repulsion_strength * 3.0 / max(dist, 0.1)
+                        repulsion = (repulsion_strength * LayoutConstants.OVERLAP_REPULSION_MULTIPLIER / 
+                                   max(dist, LayoutConstants.MIN_DISTANCE_CLAMP))
                         force_x += repulsion * dx / dist
                         force_y += repulsion * dy / dist
-                    elif dist < 2.0:
+                    elif dist < LayoutConstants.PROXIMITY_THRESHOLD:
                         # 接近时，施加较弱的排斥力
-                        repulsion = repulsion_strength * 0.5 / dist
+                        repulsion = repulsion_strength * LayoutConstants.PROXIMITY_REPULSION_FACTOR / dist
                         force_x += repulsion * dx / dist
                         force_y += repulsion * dy / dist
                 
@@ -1057,19 +1156,19 @@ class FastLayoutManager:
                 # 🆕 检查锚点是否在扇形内
                 anchor_in_sector = self._calculate_sector_penalty(anchor_x, anchor_y) > 0
                 
-                if anchor_dist > 0.5:
+                if anchor_dist > LayoutConstants.ANCHOR_TRIGGER_DISTANCE:
                     # 超过一定距离时，吸引回锚点附近
                     attraction = anchor_attraction
                     if anchor_in_sector:
-                        attraction *= 0.3  # 🆕 如果锚点在扇形内，减弱吸引力
+                        attraction *= LayoutConstants.SECTOR_ATTRACTION_REDUCTION  # 如果锚点在扇形内，减弱吸引力
                     
                     force_x += attraction * dx_anchor
                     force_y += attraction * dy_anchor
                 
                 # 🆕 扰动机制：在高温时添加随机扰动
-                if temperature > self.min_temperature * 2:
-                    perturbation_x = random.gauss(0, temperature * 0.3)
-                    perturbation_y = random.gauss(0, temperature * 0.3)
+                if temperature > self.min_temperature * LayoutConstants.TEMPERATURE_THRESHOLD_MULTIPLIER:
+                    perturbation_x = random.gauss(0, temperature * LayoutConstants.PERTURBATION_STRENGTH)
+                    perturbation_y = random.gauss(0, temperature * LayoutConstants.PERTURBATION_STRENGTH)
                     force_x += perturbation_x
                     force_y += perturbation_y
                 
@@ -1077,8 +1176,9 @@ class FastLayoutManager:
                 move_x = force_x * damping
                 move_y = force_y * damping
                 
-                # 限制单次移动距离
-                max_move = 0.5 + temperature * 0.3  # 🆕 高温时允许更大移动
+                # 限制单次移动距离（高温时允许更大移动）
+                max_move = (LayoutConstants.BASE_MAX_MOVE + 
+                           temperature * LayoutConstants.TEMPERATURE_MOVE_FACTOR)
                 move_dist = math.sqrt(move_x*move_x + move_y*move_y)
                 if move_dist > max_move:
                     move_x = move_x / move_dist * max_move
@@ -1089,7 +1189,7 @@ class FastLayoutManager:
                 new_y = element.current_y + move_y
                 
                 # 边界约束
-                margin = 0.5
+                margin = LayoutConstants.CANVAS_MARGIN
                 new_x = max(self.canvas_bounds.x_min + margin, 
                            min(new_x, self.canvas_bounds.x_max - margin))
                 new_y = max(self.canvas_bounds.y_min + margin, 
@@ -1103,7 +1203,8 @@ class FastLayoutManager:
                 element.current_y = new_y
             
             # 🆕 只有在低温且移动量很小时才提前结束
-            if temperature < self.min_temperature * 3 and max_movement < 0.01:
+            convergence_temp = self.min_temperature * LayoutConstants.CONVERGENCE_TEMP_MULTIPLIER
+            if temperature < convergence_temp and max_movement < LayoutConstants.CONVERGENCE_MOVEMENT_THRESHOLD:
                 break
     
     def _get_bbox_at_position(self, element: LayoutElement, x: float, y: float) -> BoundingBox:

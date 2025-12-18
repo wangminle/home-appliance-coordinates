@@ -5,9 +5,14 @@
 统一管理所有设备数据，提供事务式操作和数据同步机制
 """
 
+import copy
+import logging
 from typing import List, Optional, Callable, Dict, Any
 from models.device_model import Device
 from utils.validation import Validator
+
+# 配置日志记录器
+logger = logging.getLogger(__name__)
 
 
 class DeviceManagerError(Exception):
@@ -20,11 +25,6 @@ class DeviceValidationError(DeviceManagerError):
 
 class DeviceOperationError(DeviceManagerError):
     """设备操作错误"""
-    pass
-
-
-class DeviceValidationError(DeviceManagerError):
-    """设备验证错误"""
     pass
 
 
@@ -64,9 +64,12 @@ class DeviceManager:
     
     def _create_backup(self):
         """
-        创建当前设备状态的备份
+        创建当前设备状态的深拷贝备份
+        
+        使用深拷贝确保备份与原数据完全独立，
+        即使设备对象内部有可变属性也不会相互影响。
         """
-        self._transaction_backup = [device for device in self._devices]
+        self._transaction_backup = [copy.deepcopy(device) for device in self._devices]
     
     def _restore_backup(self):
         """
@@ -200,17 +203,23 @@ class DeviceManager:
             return True, "设备添加成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
-            # 回滚操作
+            # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
             print(f"❌ 设备添加失败: {error_msg}")
             return False, error_msg
-        except Exception as e:
-            # 回滚操作
+        except (ValueError, TypeError, AttributeError) as e:
+            # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
-            error_msg = f"设备添加失败: {str(e)}"
+            error_msg = f"设备数据无效: {str(e)}"
             print(f"❌ {error_msg}")
             return False, error_msg
+        except Exception as e:
+            # 意外异常：记录详细日志用于调试，返回通用错误信息
+            logger.exception("设备添加时发生意外错误")
+            self._restore_backup()
+            print(f"❌ 设备添加失败: 发生意外错误")
+            return False, "设备添加失败: 发生意外错误，请检查日志"
     
     def update_device(self, device_id: str, new_device: Device) -> tuple[bool, str]:
         """
@@ -268,17 +277,23 @@ class DeviceManager:
             return True, "设备更新成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
-            # 回滚操作
+            # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
             print(f"❌ 设备更新失败: {error_msg}")
             return False, error_msg
-        except Exception as e:
-            # 回滚操作
+        except (ValueError, TypeError, AttributeError) as e:
+            # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
-            error_msg = f"设备更新失败: {str(e)}"
+            error_msg = f"设备数据无效: {str(e)}"
             print(f"❌ {error_msg}")
             return False, error_msg
+        except Exception as e:
+            # 意外异常：记录详细日志用于调试，返回通用错误信息
+            logger.exception("设备更新时发生意外错误")
+            self._restore_backup()
+            print(f"❌ 设备更新失败: 发生意外错误")
+            return False, "设备更新失败: 发生意外错误，请检查日志"
     
     def delete_device(self, device_id: str) -> tuple[bool, str]:
         """
@@ -317,17 +332,23 @@ class DeviceManager:
             return True, "设备删除成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
-            # 回滚操作
+            # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
             print(f"❌ 设备删除失败: {error_msg}")
             return False, error_msg
-        except Exception as e:
-            # 回滚操作
+        except (ValueError, TypeError, AttributeError) as e:
+            # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
-            error_msg = f"设备删除失败: {str(e)}"
+            error_msg = f"设备数据无效: {str(e)}"
             print(f"❌ {error_msg}")
             return False, error_msg
+        except Exception as e:
+            # 意外异常：记录详细日志用于调试，返回通用错误信息
+            logger.exception("设备删除时发生意外错误")
+            self._restore_backup()
+            print(f"❌ 设备删除失败: 发生意外错误")
+            return False, "设备删除失败: 发生意外错误，请检查日志"
     
     def clear_all_devices(self) -> tuple[bool, str]:
         """
@@ -352,12 +373,18 @@ class DeviceManager:
             print("✅ 所有设备已清除")
             return True, "所有设备已清除"
             
-        except Exception as e:
-            # 回滚操作
+        except (DeviceValidationError, DeviceOperationError) as e:
+            # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
-            error_msg = f"清除设备失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            error_msg = str(e)
+            print(f"❌ 清除设备失败: {error_msg}")
             return False, error_msg
+        except Exception as e:
+            # 意外异常：记录详细日志用于调试，返回通用错误信息
+            logger.exception("清除设备时发生意外错误")
+            self._restore_backup()
+            print(f"❌ 清除设备失败: 发生意外错误")
+            return False, "清除设备失败: 发生意外错误，请检查日志"
     
     def get_device_count(self) -> int:
         """

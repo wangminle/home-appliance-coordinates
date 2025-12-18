@@ -16,6 +16,73 @@ class Calculator:
     提供各种数学计算功能，包括距离、角度、坐标转换等
     """
     
+    # 浮点数比较容差常量
+    FLOAT_TOLERANCE = 1e-9  # 默认容差
+    FLOAT_TOLERANCE_RELAXED = 1e-6  # 宽松容差（用于坐标比较）
+    
+    @staticmethod
+    def float_equals(a: float, b: float, tolerance: float = None) -> bool:
+        """
+        比较两个浮点数是否相等（考虑精度误差）
+        
+        Args:
+            a: 第一个浮点数
+            b: 第二个浮点数
+            tolerance: 容差值，默认使用 FLOAT_TOLERANCE
+            
+        Returns:
+            True 如果两个数在容差范围内相等
+        """
+        tol = tolerance if tolerance is not None else Calculator.FLOAT_TOLERANCE
+        return abs(a - b) < tol
+    
+    @staticmethod
+    def float_is_zero(value: float, tolerance: float = None) -> bool:
+        """
+        判断浮点数是否为零（考虑精度误差）
+        
+        Args:
+            value: 要判断的浮点数
+            tolerance: 容差值，默认使用 FLOAT_TOLERANCE
+            
+        Returns:
+            True 如果值在容差范围内等于零
+        """
+        tol = tolerance if tolerance is not None else Calculator.FLOAT_TOLERANCE
+        return abs(value) < tol
+    
+    @staticmethod
+    def float_less_than(a: float, b: float, tolerance: float = None) -> bool:
+        """
+        比较 a 是否小于 b（考虑精度误差）
+        
+        Args:
+            a: 第一个浮点数
+            b: 第二个浮点数
+            tolerance: 容差值
+            
+        Returns:
+            True 如果 a 显著小于 b
+        """
+        tol = tolerance if tolerance is not None else Calculator.FLOAT_TOLERANCE
+        return a < b - tol
+    
+    @staticmethod
+    def float_greater_than(a: float, b: float, tolerance: float = None) -> bool:
+        """
+        比较 a 是否大于 b（考虑精度误差）
+        
+        Args:
+            a: 第一个浮点数
+            b: 第二个浮点数
+            tolerance: 容差值
+            
+        Returns:
+            True 如果 a 显著大于 b
+        """
+        tol = tolerance if tolerance is not None else Calculator.FLOAT_TOLERANCE
+        return a > b + tol
+    
     @staticmethod
     def calculate_distance(x1: float, y1: float, x2: float, y2: float) -> float:
         """
@@ -59,18 +126,22 @@ class Calculator:
         Returns:
             与坐标轴的最小夹角（度数，0-90度）
         """
-        # 处理特殊情况
-        if x == 0 and y == 0:
+        # 使用容差比较处理浮点数精度问题
+        x_is_zero = Calculator.float_is_zero(x, Calculator.FLOAT_TOLERANCE_RELAXED)
+        y_is_zero = Calculator.float_is_zero(y, Calculator.FLOAT_TOLERANCE_RELAXED)
+        
+        # 处理特殊情况：原点
+        if x_is_zero and y_is_zero:
             return 0.0
         
         # 计算与X轴的夹角
-        if x == 0:
+        if x_is_zero:
             angle_to_x_rad = math.pi / 2
         else:
             angle_to_x_rad = abs(math.atan(y / x))
         
         # 计算与Y轴的夹角
-        if y == 0:
+        if y_is_zero:
             angle_to_y_rad = math.pi / 2
         else:
             angle_to_y_rad = abs(math.atan(x / y))
@@ -94,7 +165,9 @@ class Calculator:
         dx = x2 - x1
         dy = y2 - y1
         
-        if dx == 0 and dy == 0:
+        # 使用容差比较处理浮点数精度问题
+        if (Calculator.float_is_zero(dx, Calculator.FLOAT_TOLERANCE_RELAXED) and 
+            Calculator.float_is_zero(dy, Calculator.FLOAT_TOLERANCE_RELAXED)):
             return 0.0
         
         angle_rad = math.atan2(dy, dx)
@@ -224,6 +297,9 @@ class Calculator:
         
         return (min(x_coords), min(y_coords), max(x_coords), max(y_coords))
 
+    # 圆心判断阈值常量
+    SECTOR_CENTER_THRESHOLD = 0.01
+    
     @staticmethod
     def point_in_sector(px: float, py: float, center_x: float, center_y: float,
                        radius: float, start_angle_deg: float, end_angle_deg: float) -> bool:
@@ -243,6 +319,14 @@ class Calculator:
         # 首先检查点是否在圆内
         if not Calculator.point_in_circle(px, py, center_x, center_y, radius):
             return False
+        
+        # 特殊情况：圆心点始终在扇形内
+        # 当点非常接近圆心时，角度计算无意义，直接返回True
+        dx = px - center_x
+        dy = py - center_y
+        distance = math.sqrt(dx * dx + dy * dy)
+        if distance < Calculator.SECTOR_CENTER_THRESHOLD:
+            return True
         
         # 计算点相对于中心的角度
         point_angle_deg = Calculator.calculate_angle_between_points(center_x, center_y, px, py)

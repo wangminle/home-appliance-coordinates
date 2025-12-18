@@ -23,6 +23,10 @@ class Validator:
     MIN_DEVICE_NAME_LENGTH = 1
     MAX_DEVICE_NAME_LENGTH = 20
     
+    # 支持的图片格式（Matplotlib 支持的格式）
+    SUPPORTED_IMAGE_FORMATS = ['.png', '.jpg', '.jpeg', '.pdf', '.svg', '.eps', '.ps']
+    DEFAULT_IMAGE_FORMAT = '.png'
+    
     @staticmethod
     def validate_device_name(name: Any) -> Tuple[bool, str]:
         """
@@ -196,12 +200,15 @@ class Validator:
         return True, ""
     
     @staticmethod
-    def validate_file_path(file_path: str) -> Tuple[bool, str]:
+    def validate_file_path(file_path: str, 
+                          allowed_formats: List[str] = None) -> Tuple[bool, str]:
         """
         验证文件路径的有效性
         
         Args:
             file_path: 文件路径
+            allowed_formats: 允许的文件格式列表（如 ['.png', '.jpg']）
+                           如果为 None，则使用默认支持的格式
             
         Returns:
             (是否有效, 错误信息)
@@ -221,9 +228,14 @@ class Validator:
         if re.search(illegal_chars, filename):
             return False, "文件名包含非法字符"
         
+        # 使用默认格式或自定义格式
+        formats = allowed_formats if allowed_formats else Validator.SUPPORTED_IMAGE_FORMATS
+        
         # 检查文件扩展名
-        if not filename.lower().endswith('.png'):
-            return False, "文件必须是PNG格式"
+        file_ext = '.' + filename.lower().split('.')[-1] if '.' in filename else ''
+        if file_ext not in formats:
+            formats_str = ', '.join(formats)
+            return False, f"不支持的文件格式，支持的格式: {formats_str}"
         
         return True, ""
     

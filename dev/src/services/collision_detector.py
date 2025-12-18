@@ -14,6 +14,7 @@ V2.0 第二期重构新增模块。
 import math
 from typing import List, Tuple, Optional
 from dataclasses import dataclass
+from utils.calculation import Calculator
 
 
 @dataclass
@@ -189,6 +190,8 @@ class CollisionDetector:
         """
         检查点是否在扇形区域内
         
+        委托给 Calculator.point_in_sector 实现，避免代码重复。
+        
         Args:
             x: 点的X坐标
             y: 点的Y坐标
@@ -201,43 +204,9 @@ class CollisionDetector:
         Returns:
             True 如果点在扇形内
         """
-        # 计算点到圆心的距离
-        dx = x - center_x
-        dy = y - center_y
-        distance = math.sqrt(dx * dx + dy * dy)
-        
-        # 超出半径范围
-        if distance > radius:
-            return False
-        
-        # 特殊情况：圆心点始终在扇形内
-        if distance < 0.01:
-            return True
-        
-        # 计算点相对于圆心的角度
-        angle_rad = math.atan2(dy, dx)
-        angle_deg = math.degrees(angle_rad)
-        
-        # 归一化角度到 [0, 360) 范围
-        while angle_deg < 0:
-            angle_deg += 360
-        while angle_deg >= 360:
-            angle_deg -= 360
-        
-        # 归一化起始和结束角度
-        start = start_angle_deg % 360
-        end = end_angle_deg % 360
-        if start < 0:
-            start += 360
-        if end < 0:
-            end += 360
-        
-        # 检查角度是否在扇形范围内
-        if start <= end:
-            return start <= angle_deg <= end
-        else:
-            # 跨越0度的情况
-            return angle_deg >= start or angle_deg <= end
+        return Calculator.point_in_sector(
+            x, y, center_x, center_y, radius, start_angle_deg, end_angle_deg
+        )
     
     @staticmethod
     def box_intersects_sector(box: BoundingBox,
@@ -248,7 +217,8 @@ class CollisionDetector:
         """
         检查边界框是否与扇形区域有交集
         
-        采用保守检测：检查边界框的中心和四个角点
+        采用增强检测：检查边界框的中心、四个角点和四个边中点（共9个点）
+        这样可以减少扇形切到边但不经过角点的漏检情况。
         
         Args:
             box: 边界框
@@ -261,13 +231,23 @@ class CollisionDetector:
         Returns:
             True 如果边界框与扇形有交集
         """
-        # 获取要检测的关键点
+        # 获取边界框的中心点
         cx, cy = box.center()
+        
+        # 四个角点
         corners = [
             (box.x_min, box.y_min),  # 左下
             (box.x_max, box.y_min),  # 右下
             (box.x_min, box.y_max),  # 左上
             (box.x_max, box.y_max),  # 右上
+        ]
+        
+        # 四个边中点（用于检测扇形切到边但不经过角点的情况）
+        edge_midpoints = [
+            ((box.x_min + box.x_max) / 2, box.y_min),  # 下边中点
+            ((box.x_min + box.x_max) / 2, box.y_max),  # 上边中点
+            (box.x_min, (box.y_min + box.y_max) / 2),  # 左边中点
+            (box.x_max, (box.y_min + box.y_max) / 2),  # 右边中点
         ]
         
         # 检查中心点
@@ -280,6 +260,14 @@ class CollisionDetector:
         for corner_x, corner_y in corners:
             if CollisionDetector.point_in_sector(
                 corner_x, corner_y, center_x, center_y, 
+                radius, start_angle_deg, end_angle_deg
+            ):
+                return True
+        
+        # 检查四个边中点（增强检测精度）
+        for mid_x, mid_y in edge_midpoints:
+            if CollisionDetector.point_in_sector(
+                mid_x, mid_y, center_x, center_y,
                 radius, start_angle_deg, end_angle_deg
             ):
                 return True
