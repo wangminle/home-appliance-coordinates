@@ -1090,7 +1090,9 @@ class MatplotlibView:
     
     def clear_all(self):
         """
-        清除所有内容
+        清除所有内容（包括背景图、锁定扇形等）
+        
+        V2.5 更新: 添加背景图清除逻辑
         """
         self.devices.clear()
         self.measurement_point = None
@@ -1105,22 +1107,28 @@ class MatplotlibView:
         self._clear_sector()
         self._clear_crosshair()
         self._clear_coordinate_info()  # 清除坐标信息显示 ✨ 第五步新增功能
-        # 注意：不清除用户坐标系，让用户手动控制
+        
+        # V2.4: 清除锁定扇形数据和图钉
+        self.locked_measurement.clear()
+        self._clear_pin()
+        self._clear_comparison()
+        
+        # V2.5: 清除背景图
+        self._clear_background()
+        self.background_image = None
+        
+        # 清除用户坐标系
+        self.user_coord_enabled = False
+        self.user_position = None
+        self._clear_user_coordinate_overlay()
         
         # 重新绘制基础坐标系
         self._setup_coordinate_system(*self.current_range)
         
-        # 重新绘制用户坐标系（如果启用）
-        if self.user_coord_enabled:
-            self._draw_user_coordinate_overlay()
-            if self.user_position:
-                self._draw_user_position_marker()
-                self._draw_user_coordinate_axes()
-        
         # 更新显示
         self.canvas.draw_idle()
         
-        print("✅ 已清除所有内容")
+        print("✅ 已清除所有内容（含背景图、锁定扇形、用户坐标系）")
     
     # === 设置回调函数的方法 ===
     

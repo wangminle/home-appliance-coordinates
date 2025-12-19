@@ -166,7 +166,8 @@ class ProjectManager:
                    user_coord_settings: Optional[Dict[str, Any]] = None,
                    project_info: Optional[Dict[str, str]] = None,
                    label_positions: Optional[Dict[str, Dict[str, Any]]] = None,
-                   locked_measurement: Optional[LockedMeasurement] = None) -> Tuple[bool, str]:
+                   locked_measurement: Optional[LockedMeasurement] = None,
+                   background_image: Optional[BackgroundImage] = None) -> Tuple[bool, str]:
         """
         保存草稿到JSON文件（不更新项目状态）
         
@@ -175,6 +176,7 @@ class ProjectManager:
         
         V2.1: 添加标签位置持久化支持
         V2.4: 添加锁定扇形数据持久化支持
+        V2.5: 添加背景图持久化支持
         
         Args:
             file_path: 保存路径
@@ -184,6 +186,7 @@ class ProjectManager:
             project_info: 项目信息（可选）
             label_positions: 标签位置字典（可选）
             locked_measurement: 锁定测量数据（可选）V2.4新增
+            background_image: 背景图数据（可选）V2.5新增
             
         Returns:
             (成功标志, 消息)
@@ -196,7 +199,8 @@ class ProjectManager:
                 user_coord_settings,
                 project_info,
                 label_positions,
-                locked_measurement
+                locked_measurement,
+                background_image
             )
             
             # 验证数据

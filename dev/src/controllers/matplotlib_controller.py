@@ -709,13 +709,13 @@ class MatplotlibController:
     
     def reset_all(self):
         """
-        重置所有数据
+        重置所有数据（包括背景图、锁定扇形、用户坐标系等）
         """
         try:
             # 弹出确认对话框
             result = messagebox.askyesno(
                 "确认重置", 
-                "这将清除所有设备数据、测量点和扇形，\n并重置坐标范围为默认值。\n\n确定要继续吗？",
+                "这将清除所有设备数据、测量点、扇形、背景图，\n并重置坐标范围为默认值。\n\n确定要继续吗？",
                 icon='warning'
             )
             
@@ -726,13 +726,13 @@ class MatplotlibController:
             # 清除设备数据
             self.device_manager.clear_all_devices()
             
-            # 清除视图
+            # 清除视图（包括背景图、锁定扇形、用户坐标系）
             self.canvas_view.clear_all()
             
             # 重置坐标范围
             self.canvas_view.set_coordinate_range(10.0, 10.0)
             
-            # 重置输入面板
+            # 重置输入面板（包括背景图UI状态）
             self.input_panel.reset_inputs()
             
             print("✅ 重置完成")
@@ -1250,18 +1250,28 @@ class MatplotlibController:
     def _autosave(self):
         """执行自动保存"""
         try:
-            # 检查是否有设备数据
-            if self.device_manager.get_device_count() == 0:
-                # 没有数据，继续下一次定时
+            # 收集数据
+            devices = self.device_manager.get_devices()
+            x_range, y_range = self.canvas_view.current_range
+            
+            # V2.5: 获取锁定测量数据和背景图
+            locked_measurement = self.canvas_view.get_locked_measurement()
+            background_image = self.canvas_view.get_background_image()
+            
+            # 检查是否有需要保存的数据（设备、背景图、用户坐标系或锁定扇形）
+            has_devices = len(devices) > 0
+            has_background = background_image is not None and background_image.is_loaded()
+            has_user_coord = self.canvas_view.user_coord_enabled and self.canvas_view.user_position is not None
+            has_locked_measurement = locked_measurement is not None and locked_measurement.has_data()
+            
+            if not (has_devices or has_background or has_user_coord or has_locked_measurement):
+                # 没有任何需要保存的数据，继续下一次定时
                 self._start_autosave()
                 return
             
             # 获取自动保存文件路径
             autosave_path = self.config_manager.get_autosave_file_path()
             
-            # 收集数据
-            devices = self.device_manager.get_devices()
-            x_range, y_range = self.canvas_view.current_range
             coordinate_settings = {'x_range': x_range, 'y_range': y_range}
             
             user_coord_settings = {
@@ -1271,12 +1281,16 @@ class MatplotlibController:
             }
             
             # 保存草稿（使用 save_draft 方法，不会更新项目状态）
+            # V2.5: 添加 locked_measurement 和 background_image 参数
             success, message = self.project_manager.save_draft(
                 str(autosave_path),
                 devices,
                 coordinate_settings,
                 user_coord_settings,
-                {'name': '自动保存草稿', 'description': '自动保存的草稿文件'}
+                {'name': '自动保存草稿', 'description': '自动保存的草稿文件'},
+                None,  # label_positions
+                locked_measurement,
+                background_image
             )
             
             if success:
