@@ -34,7 +34,7 @@ class MeasurementPoint:
         self.distance_to_origin = self._calculate_distance_to_origin()
         self.angle_to_axis = self._calculate_min_angle_to_axis()
         
-        # 双坐标系计算属性 ✨ 新增功能
+        # 双坐标系计算属性 - 新增功能
         self.distance_to_reference = self._calculate_distance_to_reference()
         self.angle_to_reference_axis = self._calculate_min_angle_to_reference_axis()
         
@@ -93,7 +93,7 @@ class MeasurementPoint:
     
     def _calculate_distance_to_reference(self) -> float:
         """
-        计算到参考点的欧几里得距离 ✨ 双坐标系功能
+        计算到参考点的欧几里得距离 - 双坐标系功能
         
         Returns:
             到参考点的距离
@@ -103,7 +103,7 @@ class MeasurementPoint:
     
     def _calculate_min_angle_to_reference_axis(self) -> float:
         """
-        计算与参考点坐标轴的最小夹角 ✨ 双坐标系功能
+        计算与参考点坐标轴的最小夹角 - 双坐标系功能
         
         以参考点为原点，计算测量点与参考坐标轴的最小夹角
         
@@ -145,7 +145,7 @@ class MeasurementPoint:
         self.distance_to_origin = self._calculate_distance_to_origin()
         self.angle_to_axis = self._calculate_min_angle_to_axis()
         
-        # 重新计算双坐标系属性 ✨ 新增功能
+        # 重新计算双坐标系属性 - 新增功能
         self.distance_to_reference = self._calculate_distance_to_reference()
         self.angle_to_reference_axis = self._calculate_min_angle_to_reference_axis()
         
@@ -154,7 +154,7 @@ class MeasurementPoint:
     
     def update_reference_point(self, rx: float, ry: float):
         """
-        更新参考点并重新计算相关数据 ✨ 双坐标系功能
+        更新参考点并重新计算相关数据 - 双坐标系功能
         
         Args:
             rx: 参考点X坐标
@@ -228,7 +228,7 @@ class MeasurementPoint:
     
     def get_formatted_info(self, decimal_places: int = 3, use_reference: bool = False) -> dict:
         """
-        获取格式化的测量信息 ✨ 支持双坐标系
+        获取格式化的测量信息 - 支持双坐标系
         
         Args:
             decimal_places: 小数位数，默认3位
@@ -255,7 +255,7 @@ class MeasurementPoint:
     
     def get_info_lines(self, decimal_places: int = 3, use_reference: bool = False) -> list:
         """
-        获取测量信息的文本行列表（用于显示）✨ 支持双坐标系
+        获取测量信息的文本行列表（用于显示）- 支持双坐标系
         
         Args:
             decimal_places: 小数位数，默认3位

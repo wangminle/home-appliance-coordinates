@@ -57,9 +57,9 @@ class DeviceManager:
                 Device("4寸屏", -1.000, 3.544)
             ]
             self._devices = initial_devices
-            print(f"✅ 设备管理器初始化完成，加载了 {len(self._devices)} 个初始设备")
+            print(f"[OK] 设备管理器初始化完成，加载了 {len(self._devices)} 个初始设备")
         except Exception as e:
-            print(f"❌ 加载初始设备失败: {e}")
+            print(f"[ERROR] 加载初始设备失败: {e}")
             self._devices = []
     
     def _create_backup(self):
@@ -115,7 +115,7 @@ class DeviceManager:
             try:
                 observer(devices_copy)
             except Exception as e:
-                print(f"⚠️ 通知观察者失败: {e}")
+                print(f"[WARN] 通知观察者失败: {e}")
     
     def get_devices(self) -> List[Device]:
         """
@@ -199,26 +199,26 @@ class DeviceManager:
             # 7. 清除备份
             self._clear_backup()
             
-            print(f"✅ 设备添加成功: {device.name} ({device.x}, {device.y})")
+            print(f"[OK] 设备添加成功: {device.name} ({device.x}, {device.y})")
             return True, "设备添加成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
             # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
-            print(f"❌ 设备添加失败: {error_msg}")
+            print(f"[ERROR] 设备添加失败: {error_msg}")
             return False, error_msg
         except (ValueError, TypeError, AttributeError) as e:
             # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
             error_msg = f"设备数据无效: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             # 意外异常：记录详细日志用于调试，返回通用错误信息
             logger.exception("设备添加时发生意外错误")
             self._restore_backup()
-            print(f"❌ 设备添加失败: 发生意外错误")
+            print(f"[ERROR] 设备添加失败: 发生意外错误")
             return False, "设备添加失败: 发生意外错误，请检查日志"
     
     def update_device(self, device_id: str, new_device: Device) -> tuple[bool, str]:
@@ -273,26 +273,26 @@ class DeviceManager:
             # 7. 清除备份
             self._clear_backup()
             
-            print(f"✅ 设备更新成功: {old_device.name} -> {new_device.name}")
+            print(f"[OK] 设备更新成功: {old_device.name} -> {new_device.name}")
             return True, "设备更新成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
             # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
-            print(f"❌ 设备更新失败: {error_msg}")
+            print(f"[ERROR] 设备更新失败: {error_msg}")
             return False, error_msg
         except (ValueError, TypeError, AttributeError) as e:
             # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
             error_msg = f"设备数据无效: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             # 意外异常：记录详细日志用于调试，返回通用错误信息
             logger.exception("设备更新时发生意外错误")
             self._restore_backup()
-            print(f"❌ 设备更新失败: 发生意外错误")
+            print(f"[ERROR] 设备更新失败: 发生意外错误")
             return False, "设备更新失败: 发生意外错误，请检查日志"
     
     def delete_device(self, device_id: str) -> tuple[bool, str]:
@@ -328,26 +328,26 @@ class DeviceManager:
             # 4. 清除备份
             self._clear_backup()
             
-            print(f"✅ 设备删除成功: {device_to_delete.name}")
+            print(f"[OK] 设备删除成功: {device_to_delete.name}")
             return True, "设备删除成功"
             
         except (DeviceValidationError, DeviceOperationError) as e:
             # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
-            print(f"❌ 设备删除失败: {error_msg}")
+            print(f"[ERROR] 设备删除失败: {error_msg}")
             return False, error_msg
         except (ValueError, TypeError, AttributeError) as e:
             # 预期的数据类型异常：回滚并返回友好提示
             self._restore_backup()
             error_msg = f"设备数据无效: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             # 意外异常：记录详细日志用于调试，返回通用错误信息
             logger.exception("设备删除时发生意外错误")
             self._restore_backup()
-            print(f"❌ 设备删除失败: 发生意外错误")
+            print(f"[ERROR] 设备删除失败: 发生意外错误")
             return False, "设备删除失败: 发生意外错误，请检查日志"
     
     def clear_all_devices(self) -> tuple[bool, str]:
@@ -370,20 +370,20 @@ class DeviceManager:
             # 清除备份
             self._clear_backup()
             
-            print("✅ 所有设备已清除")
+            print("[OK] 所有设备已清除")
             return True, "所有设备已清除"
             
         except (DeviceValidationError, DeviceOperationError) as e:
             # 业务异常：回滚操作并返回错误信息
             self._restore_backup()
             error_msg = str(e)
-            print(f"❌ 清除设备失败: {error_msg}")
+            print(f"[ERROR] 清除设备失败: {error_msg}")
             return False, error_msg
         except Exception as e:
             # 意外异常：记录详细日志用于调试，返回通用错误信息
             logger.exception("清除设备时发生意外错误")
             self._restore_backup()
-            print(f"❌ 清除设备失败: 发生意外错误")
+            print(f"[ERROR] 清除设备失败: 发生意外错误")
             return False, "清除设备失败: 发生意外错误，请检查日志"
     
     def get_device_count(self) -> int:

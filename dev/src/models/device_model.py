@@ -12,7 +12,7 @@ from typing import Dict, Any, Optional
 try:
     from utils.validation import Validator
 except ImportError:
-    print("⚠️ 验证工具不可用")
+    print("[WARN] 验证工具不可用")
     Validator = None
 
 
@@ -66,10 +66,10 @@ class Device:
         self.y = float(y)
         self.created_time = datetime.now()
         
-        # 设备颜色属性 ✨ 新增功能
+        # 设备颜色属性 - 新增功能
         self.color = self._validate_color(color)
         
-        # 信息框位置状态管理 ✨ 智能避让功能（简化版）
+        # 信息框位置状态管理 - 智能避让功能（简化版）
         self.current_info_position: Optional[str] = None  # 当前信息框位置
         self.default_info_position: Optional[str] = None  # 默认信息框位置
         self.is_info_position_forced: bool = False  # 是否为强制避让位置
@@ -114,7 +114,7 @@ class Device:
                     pass
         
         # 无效颜色，返回默认值
-        print(f"⚠️ 无效的颜色值 '{color}'，使用默认红色")
+        print(f"[WARN] 无效的颜色值 '{color}'，使用默认红色")
         return self.COLOR_RED
     
     def _validate(self):
@@ -176,7 +176,7 @@ class Device:
             'name': self.name,
             'x': self.x,
             'y': self.y,
-            'color': self.color,  # ✨ 新增颜色属性
+            'color': self.color,  # - 新增颜色属性
             'created_time': self.created_time.isoformat()
         }
         
@@ -205,7 +205,7 @@ class Device:
             x=data['x'],
             y=data['y'],
             device_id=data.get('id'),
-            color=data.get('color')  # ✨ 恢复颜色属性
+            color=data.get('color')  # - 恢复颜色属性
         )
         
         # 如果有创建时间信息，则恢复

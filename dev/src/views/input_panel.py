@@ -13,6 +13,7 @@ import tkinter as tk
 from tkinter import ttk
 from typing import Optional, List, Callable, Dict, Any
 from models.device_model import Device
+from utils.font_config import get_ui_font
 
 
 class InputPanel:
@@ -61,7 +62,7 @@ class InputPanel:
         self.x_range_var = tk.StringVar(value="10")
         self.y_range_var = tk.StringVar(value="10")
         
-        # 用户坐标系相关 ✨ 双坐标系功能
+        # 用户坐标系相关 - 双坐标系功能
         self.user_coord_enabled_var = tk.BooleanVar(value=False)
         self.user_x_var = tk.StringVar(value="0.0")
         self.user_y_var = tk.StringVar(value="0.0")
@@ -75,10 +76,10 @@ class InputPanel:
         self.device_name_var = tk.StringVar()
         self.device_x_var = tk.StringVar()
         self.device_y_var = tk.StringVar()
-        self.device_color_var = tk.StringVar(value="红色")  # ✨ 新增颜色选择
+        self.device_color_var = tk.StringVar(value="红色")  # 新增颜色选择
         self.selected_device_id = None
         
-        # 颜色映射表 ✨ 新增
+        # 颜色映射表
         self.COLOR_OPTIONS = {
             "红色": Device.COLOR_RED,
             "绿色": Device.COLOR_GREEN,
@@ -95,7 +96,7 @@ class InputPanel:
         self.name_entry = None
         self.x_entry = None
         self.y_entry = None
-        self.color_combobox = None  # ✨ 新增颜色选择框引用
+        self.color_combobox = None  # 新增颜色选择框引用
         
         # 状态指示器引用
         self.status_frame = None
@@ -110,10 +111,10 @@ class InputPanel:
         self.on_device_delete_callback: Optional[Callable[[Device], None]] = None
         self.on_export_callback: Optional[Callable[[], None]] = None
         self.on_reset_callback: Optional[Callable[[], None]] = None
-        # 用户坐标系回调函数 ✨ 双坐标系功能
+        # 用户坐标系回调函数 - 双坐标系功能
         self.on_user_coord_toggle_callback: Optional[Callable[[bool], None]] = None
         self.on_user_position_set_callback: Optional[Callable[[float, float], None]] = None
-        # 背景图回调函数 ✨ V2.5 背景户型图功能
+        # 背景图回调函数 - V2.5 背景户型图功能
         self.on_background_import_callback: Optional[Callable[[str], None]] = None
         self.on_background_remove_callback: Optional[Callable[[], None]] = None
         self.on_background_scale_change_callback: Optional[Callable[[float], None]] = None
@@ -151,7 +152,7 @@ class InputPanel:
         style.configure(
             'Custom.TNotebook.Tab',
             padding=[12, 8],
-            font=('Arial', 10, 'bold')
+            font=get_ui_font(10, bold=True)
         )
         
         # 标签选中和悬停效果
@@ -190,10 +191,10 @@ class InputPanel:
         self.tab_action = ttk.Frame(self.notebook, padding=10)
         
         # 添加标签页到 Notebook
-        self.notebook.add(self.tab_coordinate, text='📍 坐标设置')
-        self.notebook.add(self.tab_background, text='🖼️ 背景设置')
-        self.notebook.add(self.tab_device, text='📋 设备管理')
-        self.notebook.add(self.tab_action, text='⚙️ 系统操作')
+        self.notebook.add(self.tab_coordinate, text='坐标设置')
+        self.notebook.add(self.tab_background, text='背景设置')
+        self.notebook.add(self.tab_device, text='设备管理')
+        self.notebook.add(self.tab_action, text='系统操作')
         
         # 在各标签页中创建内容
         self._create_coordinate_tab_content(self.tab_coordinate)
@@ -201,7 +202,7 @@ class InputPanel:
         self._create_device_tab_content(self.tab_device)
         self._create_action_tab_content(self.tab_action)
         
-        # 绑定标签页切换事件，确保切换后立即刷新界面 ✨ Bug修复
+        # 绑定标签页切换事件，确保切换后立即刷新界面 - Bug修复
         self.notebook.bind('<<NotebookTabChanged>>', self._on_tab_changed)
         
         # 默认选中第一个标签页（坐标设置）
@@ -224,7 +225,7 @@ class InputPanel:
         # === 坐标范围设置区域 ===
         range_frame = ttk.LabelFrame(
             scrollable_frame,
-            text="📐 坐标显示范围",
+            text="坐标显示范围",
             padding=(10, 10)
         )
         range_frame.pack(fill='x', pady=(0, 10))
@@ -237,19 +238,19 @@ class InputPanel:
         ttk.Label(
             input_row_frame,
             text="X轴范围:",
-            font=('Arial', 11)
+            font=get_ui_font(10)
         ).pack(side='left', padx=(0, 5))
         
         x_input_frame = ttk.Frame(input_row_frame)
         x_input_frame.pack(side='left')
         
-        ttk.Label(x_input_frame, text="±", font=('Arial', 11)).pack(side='left')
+        ttk.Label(x_input_frame, text="±", font=get_ui_font(10)).pack(side='left')
         
         x_entry = ttk.Entry(
             x_input_frame,
             textvariable=self.x_range_var,
             width=6,
-            font=('Arial', 11),
+            font=get_ui_font(10),
             justify='center'
         )
         x_entry.pack(side='left', padx=(2, 0))
@@ -259,19 +260,19 @@ class InputPanel:
         ttk.Label(
             input_row_frame,
             text="Y轴范围:",
-            font=('Arial', 11)
+            font=get_ui_font(10)
         ).pack(side='left', padx=(15, 5))
         
         y_input_frame = ttk.Frame(input_row_frame)
         y_input_frame.pack(side='left')
         
-        ttk.Label(y_input_frame, text="±", font=('Arial', 11)).pack(side='left')
+        ttk.Label(y_input_frame, text="±", font=get_ui_font(10)).pack(side='left')
         
         y_entry = ttk.Entry(
             y_input_frame,
             textvariable=self.y_range_var,
             width=6,
-            font=('Arial', 11),
+            font=get_ui_font(10),
             justify='center'
         )
         y_entry.pack(side='left', padx=(2, 0))
@@ -291,7 +292,7 @@ class InputPanel:
         tip_label = ttk.Label(
             range_frame,
             text="范围: 0.1 - 25，启用用户坐标系可进行相对位置分析",
-            font=('Arial', 8),
+            font=get_ui_font(8),
             foreground='#666666'
         )
         tip_label.pack(anchor='w', pady=(5, 0))
@@ -299,7 +300,7 @@ class InputPanel:
         # === 用户坐标系设置区域 ===
         user_coord_frame = ttk.LabelFrame(
             scrollable_frame,
-            text="🎯 用户坐标系",
+            text="用户坐标系",
             padding=(10, 10)
         )
         user_coord_frame.pack(fill='x', pady=(0, 10))
@@ -320,25 +321,25 @@ class InputPanel:
         user_pos_input_frame = ttk.Frame(self.user_position_frame)
         user_pos_input_frame.pack(fill='x', pady=(10, 5))
         
-        ttk.Label(user_pos_input_frame, text="X:", font=('Arial', 10)).pack(side='left', padx=(0, 5))
+        ttk.Label(user_pos_input_frame, text="X:", font=get_ui_font(10)).pack(side='left', padx=(0, 5))
         
         self.user_x_entry = ttk.Entry(
             user_pos_input_frame,
             textvariable=self.user_x_var,
             width=8,
-            font=('Arial', 10),
+            font=get_ui_font(10),
             justify='center'
         )
         self.user_x_entry.pack(side='left', padx=(0, 15))
         self.user_x_entry.bind('<Button-1>', lambda e: (self.user_x_entry.focus_set(), 'break')[1])
         
-        ttk.Label(user_pos_input_frame, text="Y:", font=('Arial', 10)).pack(side='left', padx=(0, 5))
+        ttk.Label(user_pos_input_frame, text="Y:", font=get_ui_font(10)).pack(side='left', padx=(0, 5))
         
         self.user_y_entry = ttk.Entry(
             user_pos_input_frame,
             textvariable=self.user_y_var,
             width=8,
-            font=('Arial', 10),
+            font=get_ui_font(10),
             justify='center'
         )
         self.user_y_entry.pack(side='left', padx=(0, 15))
@@ -355,7 +356,7 @@ class InputPanel:
         # === 当前状态指示区域 ===
         self.status_frame = ttk.LabelFrame(
             scrollable_frame,
-            text="📊 当前状态",
+            text="当前状态",
             padding=(10, 10)
         )
         self.status_frame.pack(fill='x', pady=(0, 10))
@@ -364,7 +365,7 @@ class InputPanel:
         self.coord_mode_label = ttk.Label(
             self.status_frame,
             text="坐标系模式: 世界坐标系",
-            font=('Arial', 10, 'bold'),
+            font=get_ui_font(10, bold=True),
             foreground='#2196F3'
         )
         self.coord_mode_label.pack(anchor='w')
@@ -373,7 +374,7 @@ class InputPanel:
         self.user_pos_label = ttk.Label(
             self.status_frame,
             text="用户位置: 未设置",
-            font=('Arial', 10),
+            font=get_ui_font(10),
             foreground='#666666'
         )
         self.user_pos_label.pack(anchor='w', pady=(2, 0))
@@ -381,8 +382,8 @@ class InputPanel:
         # 交互模式提示
         self.interaction_hint_label = ttk.Label(
             self.status_frame,
-            text="💡 左键单击测量距离，双击绘制扇形",
-            font=('Arial', 9),
+            text="[提示] 左键单击测量距离，双击绘制扇形",
+            font=get_ui_font(9),
             foreground='#FF9800'
         )
         self.interaction_hint_label.pack(anchor='w', pady=(5, 0))
@@ -399,7 +400,7 @@ class InputPanel:
         # === 图片导入区域 ===
         import_frame = ttk.LabelFrame(
             parent,
-            text="📁 图片导入",
+            text="图片导入",
             padding=(10, 10)
         )
         import_frame.pack(fill='x', pady=(0, 10))
@@ -409,7 +410,7 @@ class InputPanel:
         
         import_btn = ttk.Button(
             btn_frame,
-            text="📁 导入户型图",
+            text="导入户型图",
             command=self._on_import_background,
             width=14
         )
@@ -417,7 +418,7 @@ class InputPanel:
         
         self.bg_remove_btn = ttk.Button(
             btn_frame,
-            text="🗑 移除背景",
+            text="移除背景",
             command=self._on_remove_background,
             state='disabled',
             width=12
@@ -425,25 +426,25 @@ class InputPanel:
         self.bg_remove_btn.pack(side='left')
         
         # === 图片信息区域 ===
-        info_frame = ttk.LabelFrame(parent, text="📐 图片信息", padding=(10, 10))
+        info_frame = ttk.LabelFrame(parent, text="图片信息", padding=(10, 10))
         info_frame.pack(fill='x', pady=(0, 10))
         
         self.bg_info_label = ttk.Label(
             info_frame,
             text="未加载图片",
             foreground='gray',
-            font=('Arial', 10)
+            font=get_ui_font(10)
         )
         self.bg_info_label.pack(anchor='w')
         
         # === 比例设置区域 ===
-        scale_frame = ttk.LabelFrame(parent, text="📏 比例设置", padding=(10, 10))
+        scale_frame = ttk.LabelFrame(parent, text="比例设置", padding=(10, 10))
         scale_frame.pack(fill='x', pady=(0, 10))
         
         scale_input_frame = ttk.Frame(scale_frame)
         scale_input_frame.pack(fill='x', pady=5)
         
-        ttk.Label(scale_input_frame, text="每", font=('Arial', 10)).pack(side='left')
+        ttk.Label(scale_input_frame, text="每", font=get_ui_font(10)).pack(side='left')
         
         self.bg_ppu_var = tk.StringVar(value="100")
         self.bg_ppu_entry = ttk.Entry(
@@ -451,7 +452,7 @@ class InputPanel:
             textvariable=self.bg_ppu_var,
             width=8,
             justify='center',
-            font=('Arial', 10)
+            font=get_ui_font(10)
         )
         self.bg_ppu_entry.pack(side='left', padx=5)
         self.bg_ppu_entry.bind('<Return>', self._on_bg_ppu_change)
@@ -461,7 +462,7 @@ class InputPanel:
         ttk.Label(
             scale_input_frame,
             text="像素 = 1 格 (1米)",
-            font=('Arial', 10)
+            font=get_ui_font(10)
         ).pack(side='left')
         
         # 计算结果显示
@@ -469,19 +470,19 @@ class InputPanel:
             scale_frame,
             text="",
             foreground='#2e7d32',
-            font=('Arial', 9)
+            font=get_ui_font(9)
         )
         self.bg_scale_result_label.pack(anchor='w', pady=(5, 0))
         
         # === 显示设置区域 ===
-        display_frame = ttk.LabelFrame(parent, text="🎨 显示设置", padding=(10, 10))
+        display_frame = ttk.LabelFrame(parent, text="显示设置", padding=(10, 10))
         display_frame.pack(fill='x', pady=(0, 10))
         
         # 透明度设置
         alpha_row = ttk.Frame(display_frame)
         alpha_row.pack(fill='x', pady=5)
         
-        ttk.Label(alpha_row, text="透明度:", font=('Arial', 10)).pack(side='left')
+        ttk.Label(alpha_row, text="透明度:", font=get_ui_font(10)).pack(side='left')
         
         self.bg_alpha_var = tk.DoubleVar(value=0.5)
         self.bg_alpha_scale = ttk.Scale(
@@ -493,7 +494,7 @@ class InputPanel:
         )
         self.bg_alpha_scale.pack(side='left', fill='x', expand=True, padx=10)
         
-        self.bg_alpha_label = ttk.Label(alpha_row, text="50%", width=5, font=('Arial', 10))
+        self.bg_alpha_label = ttk.Label(alpha_row, text="50%", width=5, font=get_ui_font(10))
         self.bg_alpha_label.pack(side='left')
         
         # 显示开关
@@ -512,8 +513,8 @@ class InputPanel:
         
         tip_label = ttk.Label(
             tip_frame,
-            text="💡 支持 PNG/JPG 格式图片\n📏 比例设置: 指定多少像素对应1米",
-            font=('Arial', 9),
+            text="支持 PNG/JPG 格式图片\n比例设置: 指定多少像素对应1米",
+            font=get_ui_font(9),
             foreground='#666666',
             justify='left'
         )
@@ -529,7 +530,7 @@ class InputPanel:
             parent: 标签页容器
         """
         # === 设备列表区域 ===
-        list_frame = ttk.LabelFrame(parent, text="📋 设备列表", padding=(10, 10))
+        list_frame = ttk.LabelFrame(parent, text="设备列表", padding=(10, 10))
         list_frame.pack(fill='both', expand=True, pady=(0, 10))
         
         # Treeview 设备列表
@@ -559,7 +560,7 @@ class InputPanel:
         scrollbar.pack(side="right", fill="y")
         
         # === 设备编辑区域 ===
-        edit_frame = ttk.LabelFrame(parent, text="✏️ 设备信息", padding=(10, 10))
+        edit_frame = ttk.LabelFrame(parent, text="设备信息", padding=(10, 10))
         edit_frame.pack(fill='x', pady=(0, 10))
         
         # 输入字段
@@ -620,8 +621,8 @@ class InputPanel:
         # 提示信息
         tip_label = ttk.Label(
             parent,
-            text="💡 最多支持10个设备 | 选择列表项可编辑",
-            font=('Arial', 9),
+            text="最多支持10个设备 | 选择列表项可编辑",
+            font=get_ui_font(9),
             foreground='#666666'
         )
         tip_label.pack(anchor='w')
@@ -636,12 +637,12 @@ class InputPanel:
             parent: 标签页容器
         """
         # === 导出功能区域 ===
-        export_frame = ttk.LabelFrame(parent, text="📤 导出功能", padding=(10, 10))
+        export_frame = ttk.LabelFrame(parent, text="导出功能", padding=(10, 10))
         export_frame.pack(fill='x', pady=(0, 15))
         
         export_btn = ttk.Button(
             export_frame,
-            text="📷 导出PNG图像",
+            text="导出PNG图像",
             command=self._on_export,
             style='Custom.TButton'
         )
@@ -650,18 +651,18 @@ class InputPanel:
         export_tip = ttk.Label(
             export_frame,
             text="导出为高清 1920x1920 分辨率 PNG 图像",
-            font=('Arial', 9),
+            font=get_ui_font(9),
             foreground='#666666'
         )
         export_tip.pack(anchor='w')
         
         # === 数据管理区域 ===
-        data_frame = ttk.LabelFrame(parent, text="🗃️ 数据管理", padding=(10, 10))
+        data_frame = ttk.LabelFrame(parent, text="数据管理", padding=(10, 10))
         data_frame.pack(fill='x', pady=(0, 15))
         
         reset_btn = ttk.Button(
             data_frame,
-            text="🔄 重置所有数据",
+            text="重置所有数据",
             command=self._on_reset
         )
         reset_btn.pack(fill='x', pady=(0, 5))
@@ -669,13 +670,13 @@ class InputPanel:
         reset_tip = ttk.Label(
             data_frame,
             text="清除所有设备、测量点，坐标范围恢复默认",
-            font=('Arial', 9),
+            font=get_ui_font(9),
             foreground='#666666'
         )
         reset_tip.pack(anchor='w')
         
         # === 快捷键说明区域 ===
-        shortcut_frame = ttk.LabelFrame(parent, text="⌨️ 快捷键", padding=(10, 10))
+        shortcut_frame = ttk.LabelFrame(parent, text="快捷键", padding=(10, 10))
         shortcut_frame.pack(fill='x', pady=(0, 15))
         
         shortcuts = [
@@ -686,11 +687,11 @@ class InputPanel:
         for key, desc in shortcuts:
             row = ttk.Frame(shortcut_frame)
             row.pack(fill='x', pady=2)
-            ttk.Label(row, text=key, font=('Arial', 10, 'bold'), width=15).pack(side='left')
-            ttk.Label(row, text=desc, font=('Arial', 10)).pack(side='left')
+            ttk.Label(row, text=key, font=get_ui_font(10, bold=True), width=15).pack(side='left')
+            ttk.Label(row, text=desc, font=get_ui_font(10)).pack(side='left')
         
         # === 操作提示区域 ===
-        tip_frame = ttk.LabelFrame(parent, text="💡 操作提示", padding=(10, 10))
+        tip_frame = ttk.LabelFrame(parent, text="操作提示", padding=(10, 10))
         tip_frame.pack(fill='x', pady=(0, 10))
         
         tip_text = (
@@ -703,7 +704,7 @@ class InputPanel:
         tip_label = ttk.Label(
             tip_frame,
             text=tip_text,
-            font=('Arial', 10),
+            font=get_ui_font(10),
             foreground='#333333',
             justify='left'
         )
@@ -724,7 +725,7 @@ class InputPanel:
     
     def _on_tab_changed(self, event=None):
         """
-        标签页切换事件处理 ✨ Bug修复
+        标签页切换事件处理 - Bug修复
         
         确保切换标签页后立即刷新界面内容
         """
@@ -764,7 +765,7 @@ class InputPanel:
         if self.on_user_coord_toggle_callback:
             self.on_user_coord_toggle_callback(enabled)
         
-        print(f"✨ 用户坐标系{'启用' if enabled else '关闭'}")
+        print(f"[InputPanel] 用户坐标系{'启用' if enabled else '关闭'}")
     
     def _toggle_user_position_visibility(self, show: bool):
         """切换用户位置设置区域的显示/隐藏"""
@@ -794,7 +795,7 @@ class InputPanel:
                 self.on_user_position_set_callback(user_x, user_y)
             
             self.update_user_position_status((user_x, user_y))
-            print(f"✨ 设置用户位置: ({user_x}, {user_y})")
+            print(f"[InputPanel] 设置用户位置: ({user_x}, {user_y})")
             
         except ValueError:
             self._show_error("输入错误", "请输入有效的数字坐标")
@@ -838,7 +839,7 @@ class InputPanel:
                 self.on_background_scale_change_callback(ppu)
                 
         except ValueError as e:
-            print(f"⚠️ 无效的比例值: {e}")
+            print(f"[InputPanel] 无效的比例值: {e}")
     
     def _on_bg_alpha_change(self, value=None):
         """处理透明度滑块变化"""
@@ -935,7 +936,7 @@ class InputPanel:
         if self.on_reset_callback:
             self.on_reset_callback()
         # 注意：不要在这里手动设置坐标范围，由控制器通过 reset_inputs() 统一处理
-        # 避免与控制器的重置状态产生不同步 ✨ Bug修复
+        # 避免与控制器的重置状态产生不同步 - Bug修复
     
     # ========== 辅助方法 ==========
     
@@ -1179,7 +1180,7 @@ class InputPanel:
         self.update_coordinate_mode_status(False)
         self.update_user_position_status(None)
 
-        print("✅ 输入面板重置完成")
+        print("[InputPanel] 输入面板重置完成")
 
     def is_user_coord_enabled(self) -> bool:
         """查询用户坐标系是否已启用"""

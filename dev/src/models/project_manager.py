@@ -53,7 +53,7 @@ class ProjectManager:
         self.current_project_path: Optional[Path] = None
         self.current_project_name: str = "未命名项目"
         self.is_modified: bool = False
-        print("✅ ProjectManager初始化完成")
+        print("[OK] ProjectManager初始化完成")
     
     # ==================== 项目信息管理 ====================
     
@@ -143,20 +143,20 @@ class ProjectManager:
             # 更新项目状态（仅在非草稿模式下更新）
             self.set_project_path(str(file_path_obj))
             
-            print(f"✅ 项目保存成功: {file_path_obj}")
+            print(f"[OK] 项目保存成功: {file_path_obj}")
             return True, f"项目已保存到: {file_path_obj.name}"
             
         except ProjectValidationError as e:
             error_msg = str(e)
-            print(f"❌ 项目保存失败: {error_msg}")
+            print(f"[ERROR] 项目保存失败: {error_msg}")
             return False, error_msg
         except IOError as e:
             error_msg = f"文件写入失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             error_msg = f"保存项目时发生未知错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
     
     def save_draft(self, 
@@ -223,15 +223,15 @@ class ProjectManager:
             
         except ProjectValidationError as e:
             error_msg = str(e)
-            print(f"❌ 草稿保存失败: {error_msg}")
+            print(f"[ERROR] 草稿保存失败: {error_msg}")
             return False, error_msg
         except IOError as e:
             error_msg = f"文件写入失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             error_msg = f"保存草稿时发生未知错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
     
     def load_project(self, file_path: str) -> Tuple[bool, str, Optional[Dict[str, Any]]]:
@@ -266,42 +266,42 @@ class ProjectManager:
             # V2.1: 解析标签位置（如果有）
             if 'label_positions' in project_data:
                 label_count = len(project_data['label_positions'])
-                print(f"📍 加载 {label_count} 个手动标签位置")
+                print(f"[INFO] 加载 {label_count} 个手动标签位置")
             
             # V2.4: 解析锁定测量数据（如果有）
             if 'locked_measurement' in project_data:
                 locked_data = project_data['locked_measurement']
                 project_data['locked_measurement_parsed'] = LockedMeasurement.from_dict(locked_data)
                 status = "🔒锁定" if locked_data.get('is_locked', False) else "🔓解锁"
-                print(f"📍 加载锁定测量数据 ({status})")
+                print(f"[INFO] 加载锁定测量数据 ({status})")
             
             # V2.5: 解析背景图数据（如果有）
             if 'background_image' in project_data:
                 bg_data = project_data['background_image']
                 project_data['background_image_parsed'] = BackgroundImage.from_dict(bg_data)
-                print(f"🖼️ 加载背景图数据")
+                print(f"[INFO] 加载背景图数据")
             
             # 更新项目状态
             self.set_project_path(str(file_path_obj))
             
-            print(f"✅ 项目加载成功: {file_path_obj}")
+            print(f"[OK] 项目加载成功: {file_path_obj}")
             return True, f"成功加载项目: {file_path_obj.name}", project_data
             
         except (ProjectFileError, ProjectValidationError) as e:
             error_msg = str(e)
-            print(f"❌ 项目加载失败: {error_msg}")
+            print(f"[ERROR] 项目加载失败: {error_msg}")
             return False, error_msg, None
         except json.JSONDecodeError as e:
             error_msg = f"JSON文件格式错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg, None
         except IOError as e:
             error_msg = f"文件读取失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg, None
         except Exception as e:
             error_msg = f"加载项目时发生未知错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg, None
     
     # ==================== CSV设备列表操作 ====================
@@ -335,16 +335,16 @@ class ProjectManager:
                 for device in devices:
                     writer.writerow([device.name, f"{device.x:.3f}", f"{device.y:.3f}"])
             
-            print(f"✅ 设备列表导出成功: {file_path_obj}")
+            print(f"[OK] 设备列表导出成功: {file_path_obj}")
             return True, f"已导出 {len(devices)} 个设备到: {file_path_obj.name}"
             
         except IOError as e:
             error_msg = f"文件写入失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
         except Exception as e:
             error_msg = f"导出设备时发生错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg
     
     def import_devices_from_csv(self, file_path: str) -> Tuple[bool, str, List[Device]]:
@@ -384,7 +384,7 @@ class ProjectManager:
                     
                     # 验证列数
                     if len(row) < 3:
-                        print(f"⚠️ 第{line_number}行数据不完整，已跳过: {row}")
+                        print(f"[WARN] 第{line_number}行数据不完整，已跳过: {row}")
                         continue
                     
                     try:
@@ -394,7 +394,7 @@ class ProjectManager:
                         
                         # 验证设备名称
                         if not name:
-                            print(f"⚠️ 第{line_number}行设备名称为空，已跳过")
+                            print(f"[WARN] 第{line_number}行设备名称为空，已跳过")
                             continue
                         
                         # 创建设备对象
@@ -402,29 +402,29 @@ class ProjectManager:
                         devices.append(device)
                         
                     except ValueError as e:
-                        print(f"⚠️ 第{line_number}行坐标格式错误，已跳过: {row} ({e})")
+                        print(f"[WARN] 第{line_number}行坐标格式错误，已跳过: {row} ({e})")
                         continue
                     except Exception as e:
-                        print(f"⚠️ 第{line_number}行处理失败，已跳过: {e}")
+                        print(f"[WARN] 第{line_number}行处理失败，已跳过: {e}")
                         continue
             
             if not devices:
                 return False, "CSV文件中没有有效的设备数据", []
             
-            print(f"✅ 成功从CSV导入 {len(devices)} 个设备")
+            print(f"[OK] 成功从CSV导入 {len(devices)} 个设备")
             return True, f"成功导入 {len(devices)} 个设备", devices
             
         except (ProjectFileError, ProjectValidationError) as e:
             error_msg = str(e)
-            print(f"❌ 导入设备失败: {error_msg}")
+            print(f"[ERROR] 导入设备失败: {error_msg}")
             return False, error_msg, []
         except IOError as e:
             error_msg = f"文件读取失败: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg, []
         except Exception as e:
             error_msg = f"导入设备时发生错误: {str(e)}"
-            print(f"❌ {error_msg}")
+            print(f"[ERROR] {error_msg}")
             return False, error_msg, []
     
     # ==================== 私有辅助方法 ====================
@@ -478,7 +478,7 @@ class ProjectManager:
                 'name': device.name,
                 'x': device.x,
                 'y': device.y,
-                'color': device.color,  # ✨ 保存设备颜色
+                'color': device.color,  # - 保存设备颜色
                 'created_time': device.created_time.isoformat() if hasattr(device.created_time, 'isoformat') else str(device.created_time)
             }
             for device in devices
@@ -515,13 +515,13 @@ class ProjectManager:
         if locked_measurement and locked_measurement.has_data():
             project_data['locked_measurement'] = locked_measurement.to_dict()
             status = "🔒锁定" if locked_measurement.is_locked else "🔓解锁"
-            print(f"📍 保存锁定测量数据 ({status})")
+            print(f"[INFO] 保存锁定测量数据 ({status})")
         
         # V2.5: 添加背景图数据
         if background_image and background_image.is_loaded():
             project_data['background_image'] = background_image.to_dict(embed_image=True)
             actual_w, actual_h = background_image.get_actual_size()
-            print(f"🖼️ 保存背景图数据: {actual_w:.1f}m × {actual_h:.1f}m")
+            print(f"[INFO] 保存背景图数据: {actual_w:.1f}m × {actual_h:.1f}m")
         
         return project_data
     
@@ -596,7 +596,7 @@ class ProjectManager:
                     x=device_data['x'],
                     y=device_data['y'],
                     device_id=device_data.get('id'),
-                    color=device_data.get('color')  # ✨ 加载设备颜色
+                    color=device_data.get('color')  # - 加载设备颜色
                 )
                 # 恢复创建时间
                 if 'created_time' in device_data:
@@ -607,7 +607,7 @@ class ProjectManager:
                 
                 devices.append(device)
             except Exception as e:
-                print(f"⚠️ 解析设备数据失败，已跳过: {device_data} ({e})")
+                print(f"[WARN] 解析设备数据失败，已跳过: {device_data} ({e})")
                 continue
         
         return devices

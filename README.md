@@ -7,7 +7,8 @@
 [![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey.svg)]()
 
-![应用截图](docs/screenshot.png)
+<!-- 截图待添加：可在 docs/ 目录下放置 screenshot.png 后取消注释下行 -->
+<!-- ![应用截图](docs/screenshot.png) -->
 
 ## ✨ 功能特色
 
@@ -118,7 +119,7 @@ MVC架构 + DeviceManager + FastLayoutManager + Matplotlib科学绘图
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/home-appliance-coordinates.git
+git clone <your-repo-url>/home-appliance-coordinates.git
 cd home-appliance-coordinates
 
 # 安装依赖
@@ -135,11 +136,11 @@ python dev/src/main.py
 
 ```bash
 # 克隆项目
-git clone https://github.com/your-repo/home-appliance-coordinates.git
+git clone <your-repo-url>/home-appliance-coordinates.git
 cd home-appliance-coordinates
 
 # 安装依赖
-pip install matplotlib numpy
+pip install matplotlib numpy pillow adjusttext
 
 # 启动应用
 python dev/src/main.py
@@ -262,13 +263,13 @@ pipenv run pytest tests/test_label_position_improvements_20241211.py -v
 # 运行Matplotlib功能测试
 pipenv run pytest tests/test_matplotlib_functions_fixed.py -v
 
-# 运行设备管理器测试
-pipenv run pytest tests/test_device_manager.py -v
+# 运行设备模型测试
+pipenv run pytest tests/test_device_model.py -v
 ```
 
 ### 测试覆盖率
 
-- **功能测试**: 56个测试文件，100%核心功能覆盖
+- **功能测试**: 34个测试文件，覆盖核心功能
 - **布局算法测试**: 力导向、碰撞检测、4方向布局测试
 - **背景图测试**: BackgroundImage模型22个单元测试 🆕 V2.5
 - **Matplotlib测试**: 6个专项测试用例
@@ -391,10 +392,7 @@ home-appliance-coordinates/
 pipenv install --dev
 pipenv shell
 
-# 安装pre-commit钩子
-pre-commit install
-
-# 运行代码格式化
+# 运行代码格式化（可选）
 black dev/ tests/
 flake8 dev/ tests/
 ```

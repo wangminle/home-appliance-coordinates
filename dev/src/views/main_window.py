@@ -8,6 +8,7 @@
 import tkinter as tk
 from tkinter import ttk
 from typing import Optional, Callable
+from utils.font_config import get_ui_font
 
 
 class MainWindow:
@@ -148,7 +149,7 @@ class MainWindow:
             text="坐标可视化展示区 (800x800)",
             bg=self.COLORS['panel_bg'],
             fg='#666666',
-            font=('Arial', 12, 'bold')
+            font=get_ui_font(12, bold=True)
         )
         canvas_title.pack(pady=20)
         
@@ -158,7 +159,7 @@ class MainWindow:
             text="功能操作面板 (480px)",
             bg=self.COLORS['panel_bg'],
             fg='#666666',
-            font=('Arial', 12, 'bold')
+            font=get_ui_font(12, bold=True)
         )
         panel_title.pack(pady=20)
     

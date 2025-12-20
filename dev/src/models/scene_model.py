@@ -201,7 +201,7 @@ class SceneModel:
         # === 项目状态 ===
         self._is_modified: bool = False
         
-        print("✅ SceneModel 初始化完成")
+        print("[OK] SceneModel 初始化完成")
     
     # ==================== 属性访问器 ====================
     
@@ -242,10 +242,10 @@ class SceneModel:
                 self._update_measurement_user_data()
             
             self._notify_observers(ChangeType.USER_POSITION_SET, {'x': x, 'y': y})
-            print(f"✅ 用户位置已设置: ({x:.3f}, {y:.3f})")
+            print(f"[OK] 用户位置已设置: ({x:.3f}, {y:.3f})")
             return True
         except Exception as e:
-            print(f"❌ 设置用户位置失败: {e}")
+            print(f"[ERROR] 设置用户位置失败: {e}")
             return False
     
     def clear_user_position(self):
@@ -260,7 +260,7 @@ class SceneModel:
                 self._measurement.angle_to_user = None
             
             self._notify_observers(ChangeType.USER_POSITION_CLEARED, None)
-            print("✅ 用户位置已清除")
+            print("[OK] 用户位置已清除")
     
     def get_user_position(self) -> Optional[Tuple[float, float]]:
         """
@@ -294,11 +294,11 @@ class SceneModel:
             是否设置成功
         """
         if x_range <= 0 or y_range <= 0:
-            print("❌ 坐标范围必须大于0")
+            print("[ERROR] 坐标范围必须大于0")
             return False
         
         if x_range < 0.1 or x_range > 50 or y_range < 0.1 or y_range > 50:
-            print("❌ 坐标范围必须在0.1-50之间")
+            print("[ERROR] 坐标范围必须在0.1-50之间")
             return False
         
         old_range = self._coord_range
@@ -309,7 +309,7 @@ class SceneModel:
             'old': old_range,
             'new': self._coord_range
         })
-        print(f"✅ 坐标范围已设置: ±{x_range} x ±{y_range}")
+        print(f"[OK] 坐标范围已设置: ±{x_range} x ±{y_range}")
         return True
     
     # ==================== 设备管理 ====================
@@ -379,7 +379,7 @@ class SceneModel:
         self._is_modified = True
         
         self._notify_observers(ChangeType.DEVICE_ADDED, {'device': device})
-        print(f"✅ 设备添加成功: {device.name} ({device.x:.3f}, {device.y:.3f})")
+        print(f"[OK] 设备添加成功: {device.name} ({device.x:.3f}, {device.y:.3f})")
         return True, "设备添加成功"
     
     def update_device(self, device_id: str, new_data: Device) -> Tuple[bool, str]:
@@ -428,7 +428,7 @@ class SceneModel:
             'old_device': old_device,
             'new_device': new_data
         })
-        print(f"✅ 设备更新成功: {old_device.name} -> {new_data.name}")
+        print(f"[OK] 设备更新成功: {old_device.name} -> {new_data.name}")
         return True, "设备更新成功"
     
     def remove_device(self, device_id: str) -> Tuple[bool, str]:
@@ -459,7 +459,7 @@ class SceneModel:
             del self._label_positions[label_id]
         
         self._notify_observers(ChangeType.DEVICE_REMOVED, {'device': device_to_remove})
-        print(f"✅ 设备删除成功: {device_to_remove.name}")
+        print(f"[OK] 设备删除成功: {device_to_remove.name}")
         return True, "设备删除成功"
     
     def clear_devices(self):
@@ -475,7 +475,7 @@ class SceneModel:
                 del self._label_positions[key]
             
             self._notify_observers(ChangeType.DEVICES_CLEARED, {'devices': old_devices})
-            print("✅ 所有设备已清除")
+            print("[OK] 所有设备已清除")
     
     def get_device_count(self) -> int:
         """获取设备数量"""
@@ -509,7 +509,7 @@ class SceneModel:
         
         self._is_modified = True
         self._notify_observers(ChangeType.MEASUREMENT_SET, {'measurement': self._measurement})
-        print(f"✅ 测量点已设置: ({x:.3f}, {y:.3f})")
+        print(f"[OK] 测量点已设置: ({x:.3f}, {y:.3f})")
     
     def _update_measurement_user_data(self):
         """更新测量点的用户坐标系相关数据"""
@@ -542,7 +542,7 @@ class SceneModel:
                 del self._label_positions["measurement"]
             
             self._notify_observers(ChangeType.MEASUREMENT_CLEARED, None)
-            print("✅ 测量点已清除")
+            print("[OK] 测量点已清除")
     
     # ==================== 扇形管理 ====================
     
@@ -573,7 +573,7 @@ class SceneModel:
         self._is_modified = True
         
         self._notify_observers(ChangeType.SECTOR_ADDED, {'sector': sector})
-        print(f"✅ 扇形添加成功: 中心({center_x:.3f}, {center_y:.3f}), 半径{radius:.3f}")
+        print(f"[OK] 扇形添加成功: 中心({center_x:.3f}, {center_y:.3f}), 半径{radius:.3f}")
         return sector
     
     def get_sectors(self) -> List[SectorData]:
@@ -592,7 +592,7 @@ class SceneModel:
             self._is_modified = True
             
             self._notify_observers(ChangeType.SECTOR_CLEARED, None)
-            print("✅ 所有扇形已清除")
+            print("[OK] 所有扇形已清除")
     
     # ==================== 标签位置管理 ====================
     
@@ -668,7 +668,7 @@ class SceneModel:
                 'element_id': element_id,
                 'position': None  # 表示需要重新计算
             })
-            print(f"✅ 标签位置已重置: {element_id}")
+            print(f"[OK] 标签位置已重置: {element_id}")
     
     def reset_all_labels_to_auto(self):
         """重置所有标签为自动计算位置"""
@@ -679,7 +679,7 @@ class SceneModel:
         if manual_labels:
             self._is_modified = True
             self._notify_observers(ChangeType.LABEL_POSITION_CHANGED, {'reset_all': True})
-            print(f"✅ {len(manual_labels)} 个标签位置已重置")
+            print(f"[OK] {len(manual_labels)} 个标签位置已重置")
     
     # ==================== 观察者模式 ====================
     
@@ -715,7 +715,7 @@ class SceneModel:
             try:
                 observer(change_type, data)
             except Exception as e:
-                print(f"⚠️ 通知观察者失败: {e}")
+                print(f"[WARN] 通知观察者失败: {e}")
     
     # ==================== 完整重置 ====================
     
@@ -730,7 +730,7 @@ class SceneModel:
         self._is_modified = False
         
         self._notify_observers(ChangeType.FULL_RESET, None)
-        print("✅ 场景已重置")
+        print("[OK] 场景已重置")
     
     def mark_saved(self):
         """标记为已保存状态"""
@@ -797,7 +797,7 @@ class SceneModel:
                 device = Device.from_dict(d_data)
                 self.add_device(device)
             except Exception as e:
-                print(f"⚠️ 恢复设备失败: {e}")
+                print(f"[WARN] 恢复设备失败: {e}")
         
         # 恢复用户坐标系
         user_coord = data.get('user_coordinate_system', {})
@@ -821,7 +821,7 @@ class SceneModel:
         
         # 标记为未修改（刚加载完成）
         self._is_modified = False
-        print("✅ 场景数据已从字典恢复")
+        print("[OK] 场景数据已从字典恢复")
     
     def __str__(self) -> str:
         """字符串表示"""

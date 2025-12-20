@@ -30,9 +30,8 @@ from models.background_model import BackgroundImage
 from services.label_placer import LabelPlacer, DeviceAnchor, SectorObstacle
 from services.collision_detector import BoundingBox
 
-# 配置中文字体支持
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans', 'Liberation Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# 注意：中文字体支持已在 main.py 中通过 FontConfig.configure_matplotlib() 统一配置
+# 此处不再重复设置，确保使用各平台最优字体
 
 
 class SceneRenderer:
@@ -90,7 +89,7 @@ class SceneRenderer:
         
         # 按类别管理绑制对象（用于清除和更新）
         self._artists: Dict[str, List[Artist]] = {
-            'background': [],  # ✨ V2.5 背景户型图
+            'background': [],  # - V2.5 背景户型图
             'coordinate_system': [],
             'user_coordinate_system': [],
             'devices': [],
@@ -101,7 +100,7 @@ class SceneRenderer:
             'drag_highlight': [],  # 拖拽高亮效果
         }
         
-        # ✨ V2.5 背景图数据
+        # - V2.5 背景图数据
         self.background_image: Optional[BackgroundImage] = None
         self.background_artist = None
         
@@ -129,7 +128,7 @@ class SceneRenderer:
         # 当前缓存的模型引用（用于拖拽时访问）
         self._current_model: Optional[SceneModel] = None
         
-        print("✅ SceneRenderer 初始化完成（V2.1 拖拽支持版）")
+        print("[SceneRenderer] 初始化完成（V2.1 拖拽支持版）")
     
     # ==================== V2.5 背景图方法 ====================
     
@@ -167,7 +166,7 @@ class SceneRenderer:
         self.background_artist = artist
         
         actual_w, actual_h = bg.get_actual_size()
-        print(f"🖼️ SceneRenderer: 背景图已绘制 ({actual_w:.1f}m × {actual_h:.1f}m)")
+        print(f"[SceneRenderer] 背景图已绘制 ({actual_w:.1f}m x {actual_h:.1f}m)")
     
     def update_background_alpha(self, alpha: float):
         """更新背景图透明度"""
@@ -221,7 +220,7 @@ class SceneRenderer:
         # 获取坐标范围
         x_range, y_range = model.coord_range
         
-        # ✨ V2.5 先绘制背景图（最底层 zorder=0）
+        # - V2.5 先绘制背景图（最底层 zorder=0）
         self._draw_background()
         
         # 绑制坐标系统
@@ -390,8 +389,8 @@ class SceneRenderer:
         
         text = self.axes.text(
             text_x, text_y, label_text,
-            # 字体/字号：与设备标签一致（SceneRenderer设备标签为fontsize=9, bold）
-            fontsize=9, fontweight='bold',
+            # 字体/字号：与设备标签一致
+            fontsize=9, fontweight='normal',
             color=self.COLORS['user_text'],
             ha='center', va='center', zorder=17,
             bbox=dict(
@@ -464,18 +463,18 @@ class SceneRenderer:
                         direction=direction
                     )
             
-            # ✨ 转换为text对象需要的坐标
+            # - 转换为text对象需要的坐标
             # 由于ha='left'，text需要的是标签左边缘X坐标
             # va='center'，text需要的是标签中心Y坐标
             text_x = label_center_x - label_width/2  # 标签左边缘
             text_y = label_center_y  # 标签垂直中心
             
-            # ✨ 计算连接线端点（从标签边缘中点到设备点边缘中点）
+            # - 计算连接线端点（从标签边缘中点到设备点边缘中点）
             label_edge_x, label_edge_y, device_edge_x, device_edge_y = self._calculate_connection_points(
                 device.x, device.y, label_center_x, label_center_y, direction
             )
             
-            # ✨ 短虚线引导线（线宽1px，短虚线样式）
+            # - 短虚线引导线（线宽1px，短虚线样式）
             guide_line = self.axes.plot(
                 [device_edge_x, label_edge_x], [device_edge_y, label_edge_y],
                 color=device_color,
@@ -485,13 +484,13 @@ class SceneRenderer:
             )[0]
             self._artists['devices'].append(guide_line)
             
-            # ✨ 多行格式标签文本（设备名 + X坐标 + Y坐标） - 左对齐
+            # - 多行格式标签文本（设备名 + X坐标 + Y坐标） - 左对齐
             label_text = f'{device.name}\nX: {device.x:.3f}\nY: {device.y:.3f}'
             
             # 手动位置使用蓝色边框，自动位置使用设备颜色边框
             border_color = '#1976d2' if is_manual else device_color
             
-            # ✨ 创建文本对象（加粗字体、多行格式、左对齐）
+            # - 创建文本对象（加粗字体、多行格式、左对齐）
             text = self.axes.text(
                 text_x, text_y, label_text,
                 bbox=dict(
@@ -503,12 +502,12 @@ class SceneRenderer:
                     linewidth=1.0 if is_manual else 0.75
                 ),
                 fontsize=9,
-                fontweight='bold',  # ✨ 加粗字体
+                fontweight='normal',  # 正常字重
                 color=device_color,  # 使用设备颜色作为文字色
                 zorder=6, 
-                ha='left',  # ✨ 水平左对齐
+                ha='left',  # - 水平左对齐
                 va='center',  # 垂直居中
-                multialignment='left'  # ✨ 多行文本左对齐
+                multialignment='left'  # - 多行文本左对齐
             )
             self._artists['devices'].append(text)
             
@@ -890,7 +889,7 @@ class SceneRenderer:
             ),
             # 字体/字号：与设备标签说明文字一致
             fontsize=9,
-            fontweight='bold',
+            fontweight='normal',
             color=self.COLORS['text_color'],
             zorder=8, ha='center', va='center'
         )
@@ -1044,7 +1043,7 @@ class SceneRenderer:
                 edgecolor=text_color,
                 linewidth=2, alpha=0.95
             ),
-            fontsize=10, fontweight='bold',
+            fontsize=10, fontweight='normal',
             color=text_color, zorder=15, ha='left',
             arrowprops=dict(
                 arrowstyle='->',
@@ -1083,11 +1082,11 @@ class SceneRenderer:
             )
             
             self.figure.set_dpi(original_dpi)
-            print(f"✅ PNG导出成功: {file_path}")
+            print(f"[SceneRenderer] PNG导出成功: {file_path}")
             return True
             
         except Exception as e:
-            print(f"❌ PNG导出失败: {e}")
+            print(f"[SceneRenderer] PNG导出失败: {e}")
             return False
     
     # ==================== 清除方法 ====================
@@ -1130,7 +1129,7 @@ class SceneRenderer:
             enabled: True启用，False禁用
         """
         self._drag_enabled = enabled
-        print(f"📍 标签拖拽功能: {'启用' if enabled else '禁用'}")
+        print(f"[SceneRenderer] 标签拖拽功能: {'启用' if enabled else '禁用'}")
     
     def set_label_drag_callback(self, callback: Callable[[str, float, float], None]):
         """
@@ -1168,7 +1167,7 @@ class SceneRenderer:
         self.figure.canvas.mpl_connect('button_press_event', self._on_mouse_press)
         self.figure.canvas.mpl_connect('motion_notify_event', self._on_mouse_motion)
         self.figure.canvas.mpl_connect('button_release_event', self._on_mouse_release)
-        print("✅ 拖拽事件已绑定")
+        print("[SceneRenderer] 拖拽事件已绑定")
     
     def _on_mouse_press(self, event):
         """
@@ -1216,12 +1215,12 @@ class SceneRenderer:
                 if self._on_drag_start_callback:
                     self._on_drag_start_callback(clicked_label)
                 
-                print(f"🎯 开始拖拽标签: {clicked_label}")
+                print(f"[SceneRenderer] 开始拖拽标签: {clicked_label}")
         
         elif event.button == 3:  # 右键 - 重置标签位置
             if clicked_label:
                 self._reset_label_to_auto(clicked_label)
-                print(f"🔄 重置标签位置: {clicked_label}")
+                print(f"[SceneRenderer] 重置标签位置: {clicked_label}")
     
     def _reset_label_to_auto(self, element_id: str):
         """
@@ -1291,7 +1290,7 @@ class SceneRenderer:
             if self._on_drag_end_callback:
                 self._on_drag_end_callback(self._dragging_label, final_x, final_y)
             
-            print(f"✅ 完成拖拽标签: {self._dragging_label} -> ({final_x:.3f}, {final_y:.3f})")
+            print(f"[SceneRenderer] 完成拖拽标签: {self._dragging_label} -> ({final_x:.3f}, {final_y:.3f})")
             
             # 重置拖拽状态
             self._dragging_label = None
@@ -1393,8 +1392,8 @@ class SceneRenderer:
         
         Args:
             element_id: 标签ID
-            new_x: 新的X坐标
-            new_y: 新的Y坐标
+            new_x: 新的X坐标（标签中心）
+            new_y: 新的Y坐标（标签中心）
         """
         # 更新hitbox位置
         old_bbox = self._label_hitboxes.get(element_id)
@@ -1413,22 +1412,97 @@ class SceneRenderer:
                 height = old_bbox.height()
                 rect.set_xy((new_x - width/2 - 0.1, new_y - height/2 - 0.1))
         
-        # 找到对应的文本对象并更新位置
+        # 获取标签尺寸
+        label_width, label_height = self.LABEL_SIZES['device']
+        # 计算新的文本位置（标签左边缘，因为 ha='left'）
+        new_text_x = new_x - label_width / 2
+        new_text_y = new_y
+        
+        # 找到对应的文本对象和引导线并更新位置
+        text_found = False
+        guide_line_to_update = None
+        
         for artist in self._artists['devices']:
             if hasattr(artist, 'get_text') and hasattr(artist, 'set_position'):
                 # 这是文本对象，检查是否是目标
                 # 通过位置近似匹配
-                if old_bbox:
+                if old_bbox and not text_found:
                     old_center = old_bbox.center()
                     pos = artist.get_position()
-                    if abs(pos[0] - old_center[0]) < 0.5 and abs(pos[1] - old_center[1]) < 0.5:
-                        artist.set_position((new_x, new_y))
-                        break
+                    # 检查文本位置是否接近旧标签的左边缘（因为 ha='left'）
+                    old_text_x = old_center[0] - label_width / 2
+                    if abs(pos[0] - old_text_x) < 0.5 and abs(pos[1] - old_center[1]) < 0.5:
+                        artist.set_position((new_text_x, new_text_y))
+                        text_found = True
         
-        # 更新引导线（如果有）
-        # TODO: 需要重绘引导线
+        # 更新引导线
+        self._update_guide_line_for_label(element_id, new_x, new_y, old_bbox)
         
         self.figure.canvas.draw_idle()
+    
+    def _update_guide_line_for_label(self, element_id: str, label_center_x: float, 
+                                      label_center_y: float, old_bbox: Optional[BoundingBox]):
+        """
+        更新指定标签的引导线位置
+        
+        Args:
+            element_id: 标签ID（格式：device_{device_id}）
+            label_center_x: 标签新的中心X坐标
+            label_center_y: 标签新的中心Y坐标
+            old_bbox: 标签的旧边界框
+        """
+        if not old_bbox or not self._current_model:
+            return
+        
+        # 从 element_id 中提取 device_id
+        if not element_id.startswith('device_'):
+            return
+        device_id = element_id[7:]  # 去掉 'device_' 前缀
+        
+        # 获取设备信息
+        device = self._current_model.get_device_by_id(device_id)
+        if not device:
+            return
+        
+        # 计算新的引导线方向（基于标签相对于设备的位置）
+        dx = label_center_x - device.x
+        dy = label_center_y - device.y
+        
+        # 根据相对位置确定方向
+        if abs(dx) > abs(dy):
+            direction = 'right' if dx > 0 else 'left'
+        else:
+            direction = 'top' if dy > 0 else 'bottom'
+        
+        # 计算新的连接点
+        label_edge_x, label_edge_y, device_edge_x, device_edge_y = self._calculate_connection_points(
+            device.x, device.y, label_center_x, label_center_y, direction
+        )
+        
+        # 查找并更新对应的引导线
+        old_center = old_bbox.center()
+        for artist in self._artists['devices']:
+            # 引导线是 Line2D 对象，检查是否是引导线（有 get_xdata 方法但没有 get_text 方法）
+            if hasattr(artist, 'get_xdata') and hasattr(artist, 'set_data') and not hasattr(artist, 'get_text'):
+                try:
+                    xdata = artist.get_xdata()
+                    ydata = artist.get_ydata()
+                    
+                    # 检查这条线是否连接到旧标签位置附近
+                    if len(xdata) == 2 and len(ydata) == 2:
+                        # 引导线的两个端点：一个是设备边缘，一个是标签边缘
+                        # 检查是否有一个端点接近设备位置
+                        for i in range(2):
+                            if abs(xdata[i] - device.x) < 0.3 and abs(ydata[i] - device.y) < 0.3:
+                                # 这条线连接到目标设备，更新它
+                                artist.set_data(
+                                    [device_edge_x, label_edge_x],
+                                    [device_edge_y, label_edge_y]
+                                )
+                                return
+                except Exception:
+                    # 忽略无法处理的 artist
+                    pass
     
     def _set_cursor(self, cursor_type: str):
         """

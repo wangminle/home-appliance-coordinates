@@ -52,7 +52,7 @@ class SceneController:
         # 监听Model变化
         self.model.add_observer(self._on_model_changed)
         
-        print("✅ SceneController 初始化完成")
+        print("[OK] SceneController 初始化完成")
     
     def set_renderer(self, renderer: 'SceneRenderer'):
         """
@@ -70,7 +70,7 @@ class SceneController:
         # 绑定拖拽事件
         self.renderer.bind_drag_events()
         
-        print("✅ 渲染器已设置（含拖拽回调）")
+        print("[OK] 渲染器已设置（含拖拽回调）")
     
     # ==================== 外部回调设置 ====================
     
@@ -115,7 +115,7 @@ class SceneController:
         """
         # 设置测量点（Model会自动计算距离和角度）
         self.model.set_measurement(x, y)
-        print(f"📍 左键单击: 创建测量点 ({x:.3f}, {y:.3f})")
+        print(f"[INFO] 左键单击: 创建测量点 ({x:.3f}, {y:.3f})")
     
     def _handle_double_click(self, x: float, y: float):
         """
@@ -136,7 +136,7 @@ class SceneController:
         radius = math.sqrt((x - center_x)**2 + (y - center_y)**2)
         
         if radius < 0.01:  # 避免在中心点绘制
-            print("⚠️ 双击位置太接近中心点，跳过扇形创建")
+            print("[WARN] 双击位置太接近中心点，跳过扇形创建")
             return
         
         # 计算中心角度（点击点相对于中心点的角度）
@@ -210,7 +210,7 @@ class SceneController:
         """
         if not enabled:
             self.model.clear_user_position()
-        print(f"✨ 用户坐标系模式: {'启用' if enabled else '禁用'}")
+        print(f"- 用户坐标系模式: {'启用' if enabled else '禁用'}")
     
     # ==================== 设备管理 ====================
     
@@ -283,7 +283,7 @@ class SceneController:
             new_y: 新的Y坐标
         """
         self.model.set_label_position(element_id, new_x, new_y, is_manual=True)
-        print(f"🔄 标签拖拽: {element_id} -> ({new_x:.3f}, {new_y:.3f})")
+        print(f"[INFO] 标签拖拽: {element_id} -> ({new_x:.3f}, {new_y:.3f})")
     
     def _on_label_drag_start(self, element_id: str):
         """
@@ -292,7 +292,7 @@ class SceneController:
         Args:
             element_id: 被拖拽的标签ID
         """
-        print(f"🎯 控制器：开始拖拽标签 {element_id}")
+        print(f"[INFO] 控制器：开始拖拽标签 {element_id}")
     
     def _on_label_drag_end(self, element_id: str, final_x: float, final_y: float):
         """
@@ -312,7 +312,7 @@ class SceneController:
         if self.renderer:
             self.renderer.render(self.model)
         
-        print(f"✅ 控制器：标签 {element_id} 已设置为手动位置 ({final_x:.3f}, {final_y:.3f})")
+        print(f"[OK] 控制器：标签 {element_id} 已设置为手动位置 ({final_x:.3f}, {final_y:.3f})")
     
     def reset_label_position(self, element_id: str):
         """
@@ -351,7 +351,7 @@ class SceneController:
     def reset_all(self):
         """重置所有数据"""
         self.model.reset()
-        print("✅ 场景已重置")
+        print("[OK] 场景已重置")
     
     # ==================== Model变化监听 ====================
     

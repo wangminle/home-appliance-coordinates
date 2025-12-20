@@ -8,15 +8,15 @@
 
 import sys
 import os
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', 'dev', 'src'))
 
 import unittest
 from unittest.mock import Mock, patch
 import tkinter as tk
 from tkinter import ttk
 
-from dev.models.device_model import Device
-from dev.views.input_panel import InputPanel
+from models.device_model import Device
+from views.input_panel import InputPanel
 
 
 class TestFocusManagement(unittest.TestCase):

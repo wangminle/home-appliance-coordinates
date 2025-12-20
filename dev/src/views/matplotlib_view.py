@@ -17,9 +17,8 @@ import numpy as np
 import math
 import time
 
-# 配置中文字体支持
-plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'SimHei', 'DejaVu Sans', 'Liberation Sans']
-plt.rcParams['axes.unicode_minus'] = False
+# 注意：中文字体支持已在 main.py 中通过 FontConfig.configure_matplotlib() 统一配置
+# 此处不再重复设置，确保使用各平台最优字体
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
@@ -34,7 +33,7 @@ try:
     ADJUSTTEXT_AVAILABLE = True
 except ImportError:
     ADJUSTTEXT_AVAILABLE = False
-    print("⚠️ adjustText库未安装，将使用高性能原生布局算法")
+    print("[MatplotlibView] adjustText库未安装，将使用高性能原生布局算法")
 
 class MatplotlibView:
     """
@@ -62,12 +61,12 @@ class MatplotlibView:
         'sector_fill': (211/255, 47/255, 47/255, 0.3),     # 红色扇形填充色 (对照HTML)
         'sector_edge': '#d32f2f',     # 红色扇形边缘 (对照HTML)
         'crosshair': (0.0, 0.0, 0.0, 0.5),  # 十字光标颜色
-        # 用户坐标系配色 ✨ 双坐标系功能 - 视觉优化增强版
+        # 用户坐标系配色 - 双坐标系功能 - 视觉优化增强版
         'user_grid': (211/255, 47/255, 47/255, 0.5),  # 红色网格，与用户坐标轴保持一致
         'user_axis': '#d32f2f',                     # 红色虚线坐标轴（按需求调整）
         'user_marker': '#5e35b1',     # 更醒目的深紫色用户位置标记
         'user_text': '#4a148c',       # 深紫色文字
-        # ✨ V2.4 锁定扇形功能配色
+        # - V2.4 锁定扇形功能配色
         'pin_unlocked': (1.0, 1.0, 1.0, 0.8),      # 解锁图钉：白色
         'pin_locked': '#e53935',                    # 锁定图钉：红色
         'pin_bg_unlocked': (0.9, 0.9, 0.9, 0.5),   # 解锁背景：半透明灰
@@ -97,7 +96,7 @@ class MatplotlibView:
         # 扇形数据
         self.sector_point: Optional[Tuple[float, float]] = None
         
-        # 用户坐标系数据 ✨ 双坐标系功能
+        # 用户坐标系数据 - 双坐标系功能
         self.user_coord_enabled = False
         self.user_position: Optional[Tuple[float, float]] = None
         
@@ -106,7 +105,7 @@ class MatplotlibView:
         self.last_click_time = 0
         self.click_tolerance = 0.3  # 双击时间间隔
         
-        # 性能优化缓存 ✨ 性能优化
+        # 性能优化缓存 - 性能优化
         self._last_coordinate_info_text = ""  # 缓存上次的坐标信息文本
         self._coordinate_info_update_needed = True  # 是否需要更新坐标信息
         
@@ -115,10 +114,10 @@ class MatplotlibView:
         self.measurement_artists = []
         self.sector_artists = []
         self.crosshair_artists = []
-        self.user_position_artists = []  # 用户位置相关绘制对象 ✨ 双坐标系功能
-        self.coordinate_info_artists = []  # 坐标信息显示对象 ✨ 第五步新增功能
+        self.user_position_artists = []  # 用户位置相关绘制对象 - 双坐标系功能
+        self.coordinate_info_artists = []  # 坐标信息显示对象 - 第五步新增功能
         
-        # ✨ V2.4 锁定扇形功能 - 说话人方向和影响范围
+        # - V2.4 锁定扇形功能 - 说话人方向和影响范围
         self.locked_measurement = LockedMeasurement()  # 锁定测量数据模型
         self.pin_artists = []              # 图钉绘制对象
         self.comparison_artists = []       # 对比虚线和信息框
@@ -126,14 +125,14 @@ class MatplotlibView:
         self.toast_artist = None           # Toast 提示对象
         self.toast_timer_id = None         # Toast 定时器 ID
         
-        # ✨ V2.5 背景户型图功能
+        # - V2.5 背景户型图功能
         self.background_image: Optional[BackgroundImage] = None  # 背景图数据模型
         self.background_artist = None      # imshow 返回的 AxesImage 对象
         
-        # ✨ 高性能布局管理器（替代adjustText主要功能）
+        # - 高性能布局管理器（替代adjustText主要功能）
         self.fast_layout_manager: Optional[FastLayoutManager] = None
         
-        # ✨ adjustText智能避让系统（仅在复杂场景下使用）
+        # - adjustText智能避让系统（仅在复杂场景下使用）
         self.text_objects = []  # 所有需要智能避让的文本对象
         self.obstacle_objects = []  # 障碍物对象（扇形、连线等）
         self.use_adjusttext_threshold = 6  # 文本数量超过此阈值时才使用adjustText
@@ -144,7 +143,7 @@ class MatplotlibView:
         self.on_mouse_move_callback: Optional[Callable[[float, float], None]] = None
         self.on_double_click_callback: Optional[Callable[[float, float], None]] = None
         
-        # ✨ 标签拖拽功能 - 状态变量
+        # - 标签拖拽功能 - 状态变量
         self._dragging_label: Optional[any] = None  # 当前正在拖拽的标签对象
         self._drag_start_pos: Optional[Tuple[float, float]] = None  # 拖拽起始位置
         self._label_original_pos: Optional[Tuple[float, float]] = None  # 标签原始位置
@@ -157,7 +156,7 @@ class MatplotlibView:
         # 初始化高性能布局管理器
         self._init_fast_layout_manager()
         
-        print("✅ MatplotlibView初始化完成（高性能优化版）")
+        print("[MatplotlibView] 初始化完成（高性能优化版）")
     
     def _setup_matplotlib(self):
         """设置Matplotlib组件"""
@@ -171,30 +170,30 @@ class MatplotlibView:
         tk_widget = self.canvas.get_tk_widget()
         tk_widget.pack(fill=tk.BOTH, expand=True)
         
-        # ✨ 禁止canvas抢占焦点，解决与Tkinter Entry组件的焦点冲突问题
+        # - 禁止canvas抢占焦点，解决与Tkinter Entry组件的焦点冲突问题
         tk_widget.configure(takefocus=0)
         
         # 绑定事件
         self.canvas.mpl_connect('button_press_event', self._on_mouse_click)
         self.canvas.mpl_connect('motion_notify_event', self._on_mouse_move)
         self.canvas.mpl_connect('axes_leave_event', self._on_mouse_leave)
-        self.canvas.mpl_connect('button_release_event', self._on_mouse_release)  # ✨ 标签拖拽
+        self.canvas.mpl_connect('button_release_event', self._on_mouse_release)  # - 标签拖拽
         
         # 初始化坐标系统
         self._setup_coordinate_system(*self.current_range)
         
-        print("✅ Matplotlib组件设置完成")
+        print("[MatplotlibView] Matplotlib组件设置完成")
     
     def _init_fast_layout_manager(self):
         """初始化高性能布局管理器"""
         x_range, y_range = self.current_range
         canvas_bounds = (-x_range, -y_range, x_range, y_range)
         self.fast_layout_manager = FastLayoutManager(canvas_bounds)
-        print("🚀 高性能布局管理器初始化完成")
+        print("[MatplotlibView] 高性能布局管理器初始化完成")
     
     def _setup_coordinate_system(self, x_range: float, y_range: float):
         """
-        设置坐标系统 ✨ 优化版本，支持整数步进
+        设置坐标系统 - 优化版本，支持整数步进
         
         Args:
             x_range: X轴范围（±x_range）
@@ -234,10 +233,10 @@ class MatplotlibView:
         
         # 说明：原点的"大蓝点"已移除（用户反馈：原始坐标系无需额外强调原点）
         
-        # ✨ V2.5 重新绘制背景图（如果有）
+        # - V2.5 重新绘制背景图（如果有）
         self._draw_background()
         
-        print(f"✅ 坐标系统设置完成: ±{x_range} x ±{y_range}")
+        print(f"[MatplotlibView] 坐标系统设置完成: +/-{x_range} x +/-{y_range}")
     
     def _should_use_adjusttext(self) -> bool:
         """判断是否需要使用adjustText"""
@@ -261,14 +260,14 @@ class MatplotlibView:
             if self._should_use_adjusttext():
                 # 复杂场景：使用adjustText
                 self._apply_adjusttext_layout()
-                print("✅ 使用adjustText处理复杂布局")
+                print("[MatplotlibView] 使用adjustText处理复杂布局")
             else:
                 # 简单场景：使用高性能原生算法
                 self._apply_native_layout()
-                print("🚀 使用高性能原生布局算法")
+                print("[MatplotlibView] 使用高性能原生布局算法")
                 
         except Exception as e:
-            print(f"⚠️ 布局处理失败，回退到默认位置: {e}")
+            print(f"[MatplotlibView] 布局处理失败，回退到默认位置: {e}")
     
     def _apply_native_layout(self):
         """使用高性能原生布局算法（力导向版）"""
@@ -430,7 +429,7 @@ class MatplotlibView:
     
     def _on_mouse_click(self, event):
         """
-        处理鼠标点击事件 ✨ 支持标签拖拽 + 图钉点击
+        处理鼠标点击事件 - 支持标签拖拽 + 图钉点击
         """
         if event.inaxes != self.axes:
             return
@@ -442,12 +441,12 @@ class MatplotlibView:
         current_time = time.time()
         
         if event.button == 1:  # 左键
-            # ✨ V2.4 首先检查是否点击了图钉
+            # - V2.4 首先检查是否点击了图钉
             if self._is_click_on_pin(x, y):
                 self._toggle_pin_lock()
                 return
             
-            # ✨ 检查是否点击了可拖拽的标签
+            # - 检查是否点击了可拖拽的标签
             clicked_label = self._find_label_at(x, y)
             if clicked_label is not None:
                 # 开始拖拽标签
@@ -465,7 +464,7 @@ class MatplotlibView:
             self.last_click_time = current_time
             
         elif event.button == 3:  # 右键
-            # ✨ 检查是否右键点击了标签（重置到自动位置）
+            # - 检查是否右键点击了标签（重置到自动位置）
             clicked_label = self._find_label_at(x, y)
             if clicked_label is not None:
                 self._reset_label_to_auto(clicked_label)
@@ -476,22 +475,22 @@ class MatplotlibView:
     
     def _handle_single_click(self, x: float, y: float):
         """
-        处理左键单击：创建测量点或对比虚线 ✨ V2.4 支持锁定对比模式
+        处理左键单击：创建测量点或对比虚线 - V2.4 支持锁定对比模式
         """
-        # ✨ V2.4 如果已锁定，绘制对比虚线
+        # - V2.4 如果已锁定，绘制对比虚线
         if self.locked_measurement.is_locked:
             self._draw_comparison_line(x, y)
             return
         
-        # 根据用户坐标系状态选择参考点 ✨ 核心逻辑
+        # 根据用户坐标系状态选择参考点 - 核心逻辑
         if self.user_coord_enabled and self.user_position:
             # 用户坐标系模式：以用户位置为参考点
             reference_point = self.user_position
-            print(f"📍 用户坐标系模式 - 测量点: ({x:.3f}, {y:.3f}), 参考点: {reference_point}")
+            print(f"[MatplotlibView] 用户坐标系模式 - 测量点: ({x:.3f}, {y:.3f}), 参考点: {reference_point}")
         else:
             # 世界坐标系模式：以原点(0,0)为参考点
             reference_point = None
-            print(f"📍 世界坐标系模式 - 测量点: ({x:.3f}, {y:.3f})")
+            print(f"[MatplotlibView] 世界坐标系模式 - 测量点: ({x:.3f}, {y:.3f})")
         
         # 创建测量点对象
         self.measurement_point = MeasurementPoint(x, y, reference_point)
@@ -503,14 +502,14 @@ class MatplotlibView:
         if self.on_click_callback:
             self.on_click_callback(x, y)
         
-        print(f"✅ 创建测量点: ({x:.3f}, {y:.3f})")
+        print(f"[MatplotlibView] 创建测量点: ({x:.3f}, {y:.3f})")
     
     def _handle_double_click(self, x: float, y: float):
         """
         处理左键双击：绘制90度扇形（以连线为平分线向两侧各45度）
-        ✨ V2.4 增加锁定状态检测
+        - V2.4 增加锁定状态检测
         """
-        # ✨ V2.4 如果已锁定，显示 Toast 提示并返回
+        # - V2.4 如果已锁定，显示 Toast 提示并返回
         if self.locked_measurement.is_locked:
             self._show_toast("当前说话人声音影响区域已锁定，请解锁后重试")
             return
@@ -524,30 +523,30 @@ class MatplotlibView:
         else:
             center = (0.0, 0.0)
         
-        # ✨ V2.4 更新锁定测量数据（但未锁定）
+        # - V2.4 更新锁定测量数据（但未锁定）
         self.locked_measurement.set_measurement((x, y), center)
         
         # 重新绘制扇形
         self._draw_sector()
         
-        # ✨ V2.4 绘制图钉（双击点正上方）
+        # - V2.4 绘制图钉（双击点正上方）
         self._draw_pin(x, y + 0.8)
         
         # 触发回调
         if self.on_double_click_callback:
             self.on_double_click_callback(x, y)
         
-        print(f"✅ 创建扇形: 参考点({x:.3f}, {y:.3f})，点击图钉可锁定")
+        print(f"[MatplotlibView] 创建扇形: 参考点({x:.3f}, {y:.3f})，点击图钉可锁定")
     
     def _handle_right_click(self):
         """
-        处理右键单击：根据锁定状态决定清除范围 ✨ V2.4 锁定模式支持
+        处理右键单击：根据锁定状态决定清除范围 - V2.4 锁定模式支持
         """
-        # ✨ V2.4 如果已锁定，只清除对比虚线，保留锁定的扇形
+        # - V2.4 如果已锁定，只清除对比虚线，保留锁定的扇形
         if self.locked_measurement.is_locked:
             self._clear_comparison()
             self.canvas.draw_idle()
-            print("✅ 已清除对比虚线，锁定扇形保留")
+            print("[MatplotlibView] 已清除对比虚线，锁定扇形保留")
             return
         
         # 解锁状态：清除全部（原有行为）
@@ -555,12 +554,12 @@ class MatplotlibView:
         self.measurement_point = None
         self.sector_point = None
         
-        # ✨ V2.4 清除锁定测量数据和图钉
+        # - V2.4 清除锁定测量数据和图钉
         self.locked_measurement.clear()
         self._clear_pin()
         self._clear_comparison()
         
-        # 恢复所有设备信息框到默认位置 ✨ 智能避让系统
+        # 恢复所有设备信息框到默认位置 - 智能避让系统
         self._reset_device_info_positions()
         
         # 清除图形
@@ -584,7 +583,7 @@ class MatplotlibView:
         if self.on_right_click_callback:
             self.on_right_click_callback()
         
-        print("✅ 清除所有测量点和扇形，设备信息框已恢复默认位置")
+        print("[MatplotlibView] 清除所有测量点和扇形，设备信息框已恢复默认位置")
     
     def _reset_device_info_positions(self):
         """
@@ -600,17 +599,17 @@ class MatplotlibView:
                 reset_count += 1
         
         if reset_count > 0:
-            print(f"🔄 已重置 {reset_count} 个设备信息框到默认位置")
+            print(f"[MatplotlibView] 已重置 {reset_count} 个设备信息框到默认位置")
     
     def _on_mouse_move(self, event):
         """
-        处理鼠标移动事件 ✨ 交互体验优化 + 标签拖拽
+        处理鼠标移动事件 - 交互体验优化 + 标签拖拽
         """
         if event.inaxes != self.axes:
             self.mouse_pos = None
             self._clear_crosshair()
             self._clear_coordinate_info()
-            # ✨ 如果正在拖拽，离开axes时停止拖拽
+            # - 如果正在拖拽，离开axes时停止拖拽
             if self._is_dragging:
                 self._end_label_drag()
             return
@@ -622,12 +621,12 @@ class MatplotlibView:
             self._clear_coordinate_info()
             return
         
-        # ✨ 如果正在拖拽标签，更新标签位置
+        # - 如果正在拖拽标签，更新标签位置
         if self._is_dragging and self._dragging_label is not None:
             self._update_label_drag(x, y)
             return
         
-        # ✨ 检查是否悬停在标签上，改变光标
+        # - 检查是否悬停在标签上，改变光标
         hovered_label = self._find_label_at(x, y)
         if hovered_label is not None:
             self._set_cursor('hand')
@@ -637,7 +636,7 @@ class MatplotlibView:
         # 检查是否在坐标范围内
         x_range, y_range = self.current_range
         if -x_range <= x <= x_range and -y_range <= y <= y_range:
-            # 只有当鼠标位置真正改变时才更新（减少不必要的重绘）✨ 性能优化
+            # 只有当鼠标位置真正改变时才更新（减少不必要的重绘）- 性能优化
             threshold = 0.05  # 增大阈值，减少高频更新
             if not self.mouse_pos or (abs(x - self.mouse_pos[0]) > threshold or abs(y - self.mouse_pos[1]) > threshold):
                 self.mouse_pos = (x, y)
@@ -645,7 +644,7 @@ class MatplotlibView:
                 # 移除“随光标出现的坐标信息框”（世界/用户坐标系都不再显示）
                 self._clear_coordinate_info()
                 
-                # 统一重绘（批量处理，提升性能）✨ 性能优化
+                # 统一重绘（批量处理，提升性能）- 性能优化
                 self.canvas.draw_idle()
                 
                 # 触发回调
@@ -655,7 +654,7 @@ class MatplotlibView:
             if self.mouse_pos:  # 只有当之前有位置时才清除
                 self.mouse_pos = None
                 self._clear_crosshair()
-                self._clear_coordinate_info()  # ✨ 第五步新增功能
+                self._clear_coordinate_info()  # - 第五步新增功能
                 # 统一重绘
                 self.canvas.draw_idle()
     
@@ -665,11 +664,11 @@ class MatplotlibView:
         """
         self.mouse_pos = None
         self._clear_crosshair()
-        self._clear_coordinate_info()  # ✨ 第五步新增功能
+        self._clear_coordinate_info()  # - 第五步新增功能
     
     def _draw_crosshair(self):
         """
-        绘制十字光标 ✨ 性能优化：减少重复操作和批量重绘
+        绘制十字光标 - 性能优化：减少重复操作和批量重绘
         """
         if not self.mouse_pos:
             return
@@ -692,7 +691,7 @@ class MatplotlibView:
     
     def _clear_crosshair(self):
         """
-        清除十字光标 ✨ 性能优化：减少不必要的重绘
+        清除十字光标 - 性能优化：减少不必要的重绘
         """
         if not self.crosshair_artists:
             return  # 没有需要清除的对象，避免无用操作
@@ -724,7 +723,7 @@ class MatplotlibView:
             self.canvas.draw_idle()
             return
 
-        # ✨ 使用高性能原生布局算法创建设备标签（12方向约束版）
+        # - 使用高性能原生布局算法创建设备标签（12方向约束版）
         for device in self.devices:
             # 获取设备颜色（如果有color属性则使用，否则使用默认红色）
             device_color = getattr(device, 'color', self.COLORS['device_point'])
@@ -738,13 +737,13 @@ class MatplotlibView:
                                      edgecolors='white', linewidth=0.5)
             self.device_artists.append(point)
             
-            # ✨ 多行格式标签文本（设备名 + X坐标 + Y坐标）
+            # - 多行格式标签文本（设备名 + X坐标 + Y坐标）
             label_text = f'{device.name}\nX: {device.x:.3f}\nY: {device.y:.3f}'
             
             # 使用固定4方向规则计算标签中心位置
             text_x, text_y, _ = self._calculate_device_label_position_4dir(device.x, device.y)
             
-            # ✨ 短虚线引导线连接设备点和标签（线宽1px，短虚线样式）
+            # - 短虚线引导线连接设备点和标签（线宽1px，短虚线样式）
             guide_line = self.axes.plot(
                 [device.x, text_x], [device.y, text_y],
                 color=device_color,
@@ -755,7 +754,7 @@ class MatplotlibView:
             )[0]
             self.device_artists.append(guide_line)
             
-            # ✨ 创建文本对象（加粗字体、多行格式）
+            # - 创建文本对象（加粗字体、多行格式）
             text = self.axes.text(
                 text_x, text_y,
                 label_text,
@@ -767,7 +766,7 @@ class MatplotlibView:
                     alpha=0.95
                 ),
                 fontsize=9,
-                fontweight='bold',  # ✨ 加粗字体
+                fontweight='normal',  # 正常字重
                 color=device_color,  # 使用设备颜色作为文字色
                 zorder=6,
                 ha='center', 
@@ -783,7 +782,7 @@ class MatplotlibView:
     
     def _draw_measurement(self):
         """
-        绘制测量点和测量线 ✨ 支持双坐标系模式，使用高性能布局
+        绘制测量点和测量线 - 支持双坐标系模式，使用高性能布局
         """
         if not self.measurement_point:
             return
@@ -799,7 +798,7 @@ class MatplotlibView:
                              markersize=6, zorder=7)[0]
         self.measurement_artists.append(point)
         
-        # 根据坐标系模式绘制不同的连线 ✨ 动态交互模式
+        # 根据坐标系模式绘制不同的连线 - 动态交互模式
         if self.user_coord_enabled and self.user_position:
             # 用户坐标系模式：绘制到用户位置的连线
             ux, uy = self.user_position
@@ -850,7 +849,7 @@ class MatplotlibView:
             ),
             # 字体/字号：与设备标签说明文字一致
             fontsize=9,
-            fontweight='bold',
+            fontweight='normal',
             color=self.COLORS['text_color'],
             zorder=8,
             ha='center', 
@@ -870,7 +869,7 @@ class MatplotlibView:
     
     def _draw_sector(self):
         """
-        绘制90度扇形：以连线为平分线向两侧各45度 ✨ 根据坐标系状态选择中心点
+        绘制90度扇形：以连线为平分线向两侧各45度 - 根据坐标系状态选择中心点
         """
         if not self.sector_point:
             return
@@ -880,7 +879,7 @@ class MatplotlibView:
         
         x, y = self.sector_point
         
-        # 根据坐标系模式选择扇形中心点 ✨ 动态交互模式
+        # 根据坐标系模式选择扇形中心点 - 动态交互模式
         if self.user_coord_enabled and self.user_position:
             # 用户坐标系模式：以用户位置为中心
             center_x, center_y = self.user_position
@@ -954,7 +953,7 @@ class MatplotlibView:
         # 更新显示
         self.canvas.draw_idle()
         
-        print(f"✅ 绘制扇形: 半径={radius:.3f}, 中心角度={center_angle_deg:.1f}°")
+        print(f"[MatplotlibView] 绘制扇形: 半径={radius:.3f}, 中心角度={center_angle_deg:.1f}度")
     
     def _clear_devices(self):
         """
@@ -1052,10 +1051,10 @@ class MatplotlibView:
                     self._draw_user_position_marker()
                     self._draw_user_coordinate_axes()
             
-            print(f"✅ 坐标范围已更新: ±{x_range} x ±{y_range}")
+            print(f"[MatplotlibView] 坐标范围已更新: +/-{x_range} x +/-{y_range}")
             
         except Exception as e:
-            print(f"❌ 更新坐标范围失败: {e}")
+            print(f"[MatplotlibView] 更新坐标范围失败: {e}")
     
     def export_to_png(self, file_path: str, dpi: int = 300) -> bool:
         """
@@ -1081,11 +1080,11 @@ class MatplotlibView:
             # 恢复原DPI
             self.figure.set_dpi(original_dpi)
             
-            print(f"✅ PNG导出成功: {file_path}")
+            print(f"[MatplotlibView] PNG导出成功: {file_path}")
             return True
             
         except Exception as e:
-            print(f"❌ PNG导出失败: {e}")
+            print(f"[MatplotlibView] PNG导出失败: {e}")
             return False
     
     def clear_all(self):
@@ -1106,7 +1105,7 @@ class MatplotlibView:
         self._clear_measurement()
         self._clear_sector()
         self._clear_crosshair()
-        self._clear_coordinate_info()  # 清除坐标信息显示 ✨ 第五步新增功能
+        self._clear_coordinate_info()  # 清除坐标信息显示 - 第五步新增功能
         
         # V2.4: 清除锁定扇形数据和图钉
         self.locked_measurement.clear()
@@ -1128,7 +1127,7 @@ class MatplotlibView:
         # 更新显示
         self.canvas.draw_idle()
         
-        print("✅ 已清除所有内容（含背景图、锁定扇形、用户坐标系）")
+        print("[MatplotlibView] 已清除所有内容（含背景图、锁定扇形、用户坐标系）")
     
     # === 设置回调函数的方法 ===
     
@@ -1249,31 +1248,31 @@ class MatplotlibView:
         direction, cx, cy = candidates[0]
         return cx, cy, direction
 
-    # === 用户坐标系功能 ✨ 双坐标系核心功能 ===
+    # === 用户坐标系功能 - 双坐标系核心功能 ===
     
     def set_user_coordinate_mode(self, enabled: bool):
         """
-        设置用户坐标系模式 ✨ 支持动态交互模式切换
+        设置用户坐标系模式 - 支持动态交互模式切换
         
         Args:
             enabled: True启用用户坐标系，False使用世界坐标系
         """
         self.user_coord_enabled = enabled
-        print(f"✨ 视图设置用户坐标系模式: {'启用' if enabled else '关闭'}")
+        print(f"[MatplotlibView] 视图设置用户坐标系模式: {'启用' if enabled else '关闭'}")
         
         if enabled:
             self._draw_user_coordinate_overlay()
         else:
             self._clear_user_coordinate_overlay()
         
-        # 更新现有测量点的参考系统 ✨ 动态交互模式
+        # 更新现有测量点的参考系统 - 动态交互模式
         self._update_measurement_reference()
         
         self.canvas.draw_idle()
     
     def _update_measurement_reference(self):
         """
-        根据当前坐标系状态更新测量点的参考点 ✨ 动态交互模式核心方法
+        根据当前坐标系状态更新测量点的参考点 - 动态交互模式核心方法
         """
         if self.measurement_point:
             # 确定新的参考点
@@ -1296,7 +1295,7 @@ class MatplotlibView:
     
     def set_user_position(self, x: float, y: float):
         """
-        设置用户位置 ✨ 自动更新测量点参考系统
+        设置用户位置 - 自动更新测量点参考系统
         
         Args:
             x: 用户X坐标
@@ -1305,9 +1304,9 @@ class MatplotlibView:
         old_position = self.user_position
         
         # 先做一次格式化输出，确保x/y是可用数值；也避免非法输入导致状态被提前改动
-        print(f"✨ 视图设置用户位置: ({x:.3f}, {y:.3f})")
+        print(f"[MatplotlibView] 视图设置用户位置: ({x:.3f}, {y:.3f})")
         
-        # ✨ V2.4 如果已锁定扇形且“参考中心”发生变化，自动解锁
+        # - V2.4 如果已锁定扇形且“参考中心”发生变化，自动解锁
         # 关键修复点：
         # - 当锁定扇形在世界坐标系下创建（中心点为(0,0)）后，用户首次启用用户坐标系并从None设置用户位置时
         #   参考中心会从(0,0)切换到用户位置；若不解锁，后续对比虚线仍会使用旧中心点，导致角度/距离错误。
@@ -1325,7 +1324,7 @@ class MatplotlibView:
             self._draw_user_position_marker()
             self._draw_user_coordinate_axes()
             
-            # 更新现有测量点的参考系统 ✨ 动态交互模式
+            # 更新现有测量点的参考系统 - 动态交互模式
             self._update_measurement_reference()
         
         self.canvas.draw_idle()
@@ -1371,7 +1370,7 @@ class MatplotlibView:
                                    linewidth=0.8, linestyle=':', alpha=0.25, zorder=0.5)
             self.user_position_artists.append(line)
         
-        print("✨ 绘制用户坐标系网格叠加层")
+        print("[MatplotlibView] 绘制用户坐标系网格叠加层")
     
     def _draw_user_position_marker(self):
         """绘制用户位置标记（紫色人形图标）"""
@@ -1408,7 +1407,7 @@ class MatplotlibView:
             label_text, 
             # 字体/字号：与设备标签说明文字一致
             fontsize=9, 
-            fontweight='bold',
+            fontweight='normal',
             color=self.COLORS['user_text'],
             ha='center', 
             va='center', 
@@ -1427,7 +1426,7 @@ class MatplotlibView:
         # 注意：用户原点标签不加入 self.text_objects，也不参与智能避让，
         # 否则会导致位置“随动/漂移”，违背“固定在正下方2格”的需求
         
-        print(f"✨ 绘制用户位置标记: ({x:.3f}, {y:.3f})")
+        print(f"[MatplotlibView] 绘制用户位置标记: ({x:.3f}, {y:.3f})")
     
     def _draw_user_coordinate_axes(self):
         """绘制用户坐标系轴线（红色虚线）"""
@@ -1471,7 +1470,7 @@ class MatplotlibView:
                                        zorder=7)
             self.user_position_artists.append(y_arrow)
         
-        print(f"✨ 绘制用户坐标系轴线: 中心({x:.3f}, {y:.3f})")
+        print(f"[MatplotlibView] 绘制用户坐标系轴线: 中心({x:.3f}, {y:.3f})")
     
     def _clear_user_coordinate_overlay(self):
         """清除用户坐标系叠加层"""
@@ -1489,7 +1488,7 @@ class MatplotlibView:
         if self.fast_layout_manager:
             self.fast_layout_manager.remove_element_by_type(ElementType.USER_POSITION)
         
-        print("✨ 清除用户坐标系叠加层")
+        print("[MatplotlibView] 清除用户坐标系叠加层")
     
     def _clear_user_position_marker(self):
         """清除用户位置标记和轴线，但保留网格"""
@@ -1517,9 +1516,9 @@ class MatplotlibView:
     def _clear_user_position_elements(self):
         """清除所有用户位置相关元素"""
         self._clear_user_coordinate_overlay()
-        print("✨ 清除所有用户位置元素")
+        print("[MatplotlibView] 清除所有用户位置元素")
     
-    # === 坐标信息显示功能 ✨ 第五步新增功能 ===
+    # === 坐标信息显示功能 - 第五步新增功能 ===
     
     def _draw_coordinate_info(self, x: float, y: float):
         """
@@ -1547,7 +1546,7 @@ class MatplotlibView:
         self.coordinate_info_artists.clear()
         self.canvas.draw_idle()
     
-    # ==================== 标签拖拽功能 ✨ ====================
+    # ==================== 标签拖拽功能 - ====================
     
     def _on_mouse_release(self, event):
         """
@@ -1612,7 +1611,7 @@ class MatplotlibView:
         ))
         
         self.canvas.draw_idle()
-        print(f"🎯 开始拖拽标签: {label.get_text()[:20]}...")
+        print(f"[MatplotlibView] 开始拖拽标签: {label.get_text()[:20]}...")
     
     def _update_label_drag(self, x: float, y: float):
         """
@@ -1709,7 +1708,7 @@ class MatplotlibView:
         
         # 获取最终位置
         final_pos = self._dragging_label.get_position()
-        print(f"✅ 标签拖拽完成: 新位置 ({final_pos[0]:.2f}, {final_pos[1]:.2f})")
+        print(f"[MatplotlibView] 标签拖拽完成: 新位置 ({final_pos[0]:.2f}, {final_pos[1]:.2f})")
         
         # 恢复光标
         self._set_cursor('arrow')
@@ -1730,7 +1729,7 @@ class MatplotlibView:
             label: 要重置的标签对象
         """
         label_text = label.get_text()
-        print(f"🔄 重置标签位置: {label_text[:20]}...")
+        print(f"[MatplotlibView] 重置标签位置: {label_text[:20]}...")
         
         auto_x, auto_y = None, None
         
@@ -1789,7 +1788,7 @@ class MatplotlibView:
             ))
         
         self.canvas.draw_idle()
-        print(f"✅ 标签已重置到自动位置")
+        print(f"[MatplotlibView] 标签已重置到自动位置")
     
     def _set_cursor(self, cursor_type: str):
         """
@@ -1999,7 +1998,7 @@ class MatplotlibView:
         self.comparison_artists.append(point)
         
         # 绘制对比信息框（点击点下方）
-        info_text = f"📐 夹角: {angle_diff:.1f}°\n📏 距离: {new_distance:.3f}"
+        info_text = f"夹角: {angle_diff:.1f}度\n距离: {new_distance:.3f}"
         info_box = self.axes.text(
             x, y - 1.0,  # 点击点下方1个单位
             info_text,
@@ -2011,7 +2010,7 @@ class MatplotlibView:
                 alpha=0.95
             ),
             fontsize=10,
-            fontweight='bold',
+            fontweight='normal',
             color=self.COLORS['comparison_text'],
             ha='center', va='top',
             zorder=17
@@ -2019,7 +2018,7 @@ class MatplotlibView:
         self.comparison_artists.append(info_box)
         
         self.canvas.draw_idle()
-        print(f"📐 夹角: {angle_diff:.1f}°, 距离: {new_distance:.3f}")
+        print(f"[MatplotlibView] 夹角: {angle_diff:.1f}度, 距离: {new_distance:.3f}")
     
     def _clear_comparison(self):
         """清除对比虚线和信息框"""
@@ -2155,7 +2154,7 @@ class MatplotlibView:
         self.background_image = bg_image
         self._draw_background()
         self.canvas.draw_idle()
-        print(f"✅ 背景户型图已设置")
+        print(f"[MatplotlibView] 背景户型图已设置")
     
     def update_background_scale(self, pixels_per_unit: float) -> bool:
         """
@@ -2201,7 +2200,7 @@ class MatplotlibView:
         )
         
         actual_w, actual_h = bg.get_actual_size()
-        print(f"🖼️ 背景户型图已绑制: {actual_w:.1f}m × {actual_h:.1f}m, alpha={bg.alpha}")
+        print(f"[MatplotlibView] 背景户型图已绑制: {actual_w:.1f}m x {actual_h:.1f}m, alpha={bg.alpha}")
     
     def _clear_background(self):
         """清除背景图"""
@@ -2224,7 +2223,7 @@ class MatplotlibView:
             if self.background_artist:
                 self.background_artist.set_alpha(alpha)
                 self.canvas.draw_idle()
-                print(f"🎨 背景图透明度更新: {int(alpha * 100)}%")
+                print(f"[MatplotlibView] 背景图透明度更新: {int(alpha * 100)}%")
     
     def toggle_background_visibility(self, visible: bool):
         """
@@ -2240,7 +2239,7 @@ class MatplotlibView:
             else:
                 self._clear_background()
             self.canvas.draw_idle()
-            print(f"👁️ 背景图显示: {'开启' if visible else '关闭'}")
+            print(f"[MatplotlibView] 背景图显示: {'开启' if visible else '关闭'}")
     
     def remove_background(self):
         """移除背景图"""
@@ -2249,7 +2248,7 @@ class MatplotlibView:
             self.background_image.clear()
         self.background_image = None
         self.canvas.draw_idle()
-        print("🗑️ 背景图已移除")
+        print("[MatplotlibView] 背景图已移除")
     
     def get_background_image(self) -> Optional[BackgroundImage]:
         """

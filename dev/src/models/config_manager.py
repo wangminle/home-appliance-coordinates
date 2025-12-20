@@ -32,7 +32,7 @@ class ConfigManager:
         self.config_dir = self._get_config_dir()
         self.config_file = self.config_dir / "config.json"
         self.config_data = self._load_config()
-        print(f"✅ ConfigManager初始化完成，配置目录: {self.config_dir}")
+        print(f"[OK] ConfigManager初始化完成，配置目录: {self.config_dir}")
     
     # ==================== 配置文件操作 ====================
     
@@ -78,10 +78,10 @@ class ConfigManager:
         try:
             with open(self.config_file, 'r', encoding='utf-8') as f:
                 config = json.load(f)
-            print(f"✅ 配置文件加载成功")
+            print(f"[OK] 配置文件加载成功")
             return config
         except Exception as e:
-            print(f"⚠️ 配置文件加载失败，使用默认配置: {e}")
+            print(f"[WARN] 配置文件加载失败，使用默认配置: {e}")
             return self._get_default_config()
     
     def _save_config(self) -> bool:
@@ -96,7 +96,7 @@ class ConfigManager:
                 json.dump(self.config_data, f, ensure_ascii=False, indent=2)
             return True
         except Exception as e:
-            print(f"❌ 配置文件保存失败: {e}")
+            print(f"[ERROR] 配置文件保存失败: {e}")
             return False
     
     def _get_default_config(self) -> Dict[str, Any]:
@@ -177,7 +177,7 @@ class ConfigManager:
             return self._save_config()
             
         except Exception as e:
-            print(f"❌ 添加最近文件失败: {e}")
+            print(f"[ERROR] 添加最近文件失败: {e}")
             return False
     
     def remove_recent_file(self, file_path: str) -> bool:
@@ -202,7 +202,7 @@ class ConfigManager:
             return True
             
         except Exception as e:
-            print(f"❌ 移除最近文件失败: {e}")
+            print(f"[ERROR] 移除最近文件失败: {e}")
             return False
     
     def clear_recent_files(self) -> bool:
@@ -216,7 +216,7 @@ class ConfigManager:
             self.config_data['recent_files'] = []
             return self._save_config()
         except Exception as e:
-            print(f"❌ 清空最近文件失败: {e}")
+            print(f"[ERROR] 清空最近文件失败: {e}")
             return False
     
     # ==================== 自动保存设置 ====================
@@ -346,10 +346,10 @@ class ConfigManager:
                 file_to_delete.unlink()
                 deleted_count += 1
             except Exception as e:
-                print(f"⚠️ 删除旧草稿文件失败: {file_to_delete} ({e})")
+                print(f"[WARN] 删除旧草稿文件失败: {file_to_delete} ({e})")
         
         if deleted_count > 0:
-            print(f"✅ 清理了 {deleted_count} 个旧的自动保存文件")
+            print(f"[OK] 清理了 {deleted_count} 个旧的自动保存文件")
         
         return deleted_count
     

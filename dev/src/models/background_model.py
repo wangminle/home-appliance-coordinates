@@ -91,14 +91,14 @@ class BackgroundImage:
             # 使用默认比例计算坐标范围（中心对齐）
             self._calculate_extent()
             
-            print(f"✅ 背景图加载成功: {self.pixel_width}×{self.pixel_height} px, DPI={self.dpi}")
+            print(f"[OK] 背景图加载成功: {self.pixel_width}×{self.pixel_height} px, DPI={self.dpi}")
             return True
             
         except ImportError:
-            print("❌ 缺少 Pillow 库，请安装: pip install Pillow")
+            print("[ERROR] 缺少 Pillow 库，请安装: pip install Pillow")
             return False
         except Exception as e:
-            print(f"❌ 加载背景图失败: {e}")
+            print(f"[ERROR] 加载背景图失败: {e}")
             return False
     
     def set_pixels_per_unit(self, ppu: float) -> bool:
@@ -112,14 +112,14 @@ class BackgroundImage:
             是否设置成功
         """
         if ppu <= 0:
-            print("⚠️ 像素比例必须大于0")
+            print("[WARN] 像素比例必须大于0")
             return False
         
         self.pixels_per_unit = ppu
         self._calculate_extent()
         
         actual_w, actual_h = self.get_actual_size()
-        print(f"📏 比例更新: {ppu} px/格 → 实际尺寸: {actual_w:.1f}m × {actual_h:.1f}m")
+        print(f"[INFO] 比例更新: {ppu} px/格 → 实际尺寸: {actual_w:.1f}m × {actual_h:.1f}m")
         return True
     
     def _calculate_extent(self):
@@ -254,7 +254,7 @@ class BackgroundImage:
         self.y_min = 0.0
         self.y_max = 0.0
         self.enabled = True
-        print("🗑️ 背景图已清除")
+        print("[INFO] 背景图已清除")
     
     # ==================== 序列化方法 ====================
     
@@ -290,7 +290,7 @@ class BackgroundImage:
                 data['image_base64'] = base64.b64encode(buffer.getvalue()).decode('utf-8')
                 print(f"💾 背景图已嵌入项目文件 (Base64)")
             except Exception as e:
-                print(f"⚠️ 嵌入背景图失败，仅保存路径: {e}")
+                print(f"[WARN] 嵌入背景图失败，仅保存路径: {e}")
         
         return data
     
@@ -326,7 +326,7 @@ class BackgroundImage:
                 bg._calculate_extent()
                 print(f"📂 背景图从 Base64 恢复成功")
             except Exception as e:
-                print(f"⚠️ 从 Base64 恢复背景图失败: {e}")
+                print(f"[WARN] 从 Base64 恢复背景图失败: {e}")
         
         # 如果 Base64 恢复失败，尝试从文件路径加载
         if bg.image_data is None and bg.image_path:
@@ -336,7 +336,7 @@ class BackgroundImage:
                     bg.set_pixels_per_unit(data.get('pixels_per_unit', 100.0))
                     print(f"📂 背景图从文件路径恢复成功: {bg.image_path}")
             else:
-                print(f"⚠️ 背景图文件不存在: {bg.image_path}")
+                print(f"[WARN] 背景图文件不存在: {bg.image_path}")
         
         return bg
     

@@ -13,6 +13,9 @@ import os
 # 确保能够导入其他模块
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
+# 导入字体配置（必须在导入 Matplotlib 相关模块之前）
+from utils.font_config import FontConfig
+
 from controllers.matplotlib_controller import MatplotlibController
 
 
@@ -21,7 +24,10 @@ def main():
     应用程序主入口
     """
     try:
-        print("🚀 启动家居设备坐标距离角度绘制工具 - Matplotlib版")
+        print("[Main] 启动家居设备坐标距离角度绘制工具 - Matplotlib版")
+        
+        # 初始化跨平台字体配置（必须在创建 Figure 之前）
+        FontConfig.configure_matplotlib()
         
         # 创建主窗口
         root = tk.Tk()
@@ -30,13 +36,13 @@ def main():
         controller = MatplotlibController(root)
         
         # 启动GUI主循环
-        print("✅ 应用程序启动完成")
+        print("[Main] 应用程序启动完成")
         root.mainloop()
         
     except KeyboardInterrupt:
-        print("\n⚡ 用户中断应用程序")
+        print("\n[Main] 用户中断应用程序")
     except Exception as e:
-        print(f"💥 应用程序启动失败: {e}")
+        print(f"[Main] 应用程序启动失败: {e}")
         import traceback
         traceback.print_exc()
 

@@ -65,7 +65,7 @@ class MatplotlibController:
         # 检查是否有草稿文件需要恢复
         self._check_autosave_recovery()
         
-        print("✅ MatplotlibController初始化完成")
+        print("[OK] MatplotlibController初始化完成")
     
     def _create_main_interface(self):
         """
@@ -94,7 +94,7 @@ class MatplotlibController:
         self.canvas_view = MatplotlibView(left_frame)
         self.input_panel = InputPanel(right_frame, self)
         
-        print("✅ 主界面创建完成")
+        print("[OK] 主界面创建完成")
     
     def _create_menu_bar(self):
         """
@@ -131,7 +131,7 @@ class MatplotlibController:
         self.root.bind('<Control-s>', lambda e: self.save_project())
         self.root.bind('<Control-Shift-S>', lambda e: self.save_project_as())
         
-        print("✅ 菜单栏创建完成")
+        print("[OK] 菜单栏创建完成")
     
     def _bind_view_events(self):
         """
@@ -151,11 +151,11 @@ class MatplotlibController:
         self.input_panel.set_export_callback(self.export_png)
         self.input_panel.set_reset_callback(self.reset_all)
         
-        # 绑定用户坐标系事件 ✨ 双坐标系功能
+        # 绑定用户坐标系事件 - 双坐标系功能
         self.input_panel.set_user_coord_toggle_callback(self._on_user_coord_toggle)
         self.input_panel.set_user_position_set_callback(self._on_user_position_set)
         
-        # 绑定背景图事件 ✨ V2.5 背景户型图功能
+        # 绑定背景图事件 - V2.5 背景户型图功能
         self.input_panel.set_background_import_callback(self._on_background_import)
         self.input_panel.set_background_remove_callback(self._on_background_remove)
         self.input_panel.set_background_scale_change_callback(self._on_background_scale_change)
@@ -166,7 +166,7 @@ class MatplotlibController:
         self.canvas_view.update_devices(self.device_manager.get_devices())
         self.input_panel.update_devices(self.device_manager.get_devices())
         
-        print("✅ 视图事件绑定完成")
+        print("[OK] 视图事件绑定完成")
     
     def _on_canvas_click(self, x: float, y: float):
         """
@@ -176,7 +176,7 @@ class MatplotlibController:
             x: 点击的X坐标
             y: 点击的Y坐标
         """
-        print(f"📍 左键单击坐标: ({x:.3f}, {y:.3f})")
+        print(f"[INFO] 左键单击坐标: ({x:.3f}, {y:.3f})")
         # 测量点已在视图中处理，这里可以添加额外逻辑
     
     def _on_canvas_double_click(self, x: float, y: float):
@@ -212,7 +212,7 @@ class MatplotlibController:
     
     def _on_range_change(self, x_range: float, y_range: float):
         """
-        处理坐标范围变化事件 ✨ 第五步增强：更新状态指示器
+        处理坐标范围变化事件 - 第五步增强：更新状态指示器
         """
         self.set_coordinate_range(x_range, y_range)
         # 更新范围状态（确保UI同步）
@@ -256,21 +256,21 @@ class MatplotlibController:
             # 更新输入面板显示
             self.input_panel.update_devices(self.device_manager.get_devices())
 
-    # === 用户坐标系事件处理 ✨ 双坐标系功能 ===
+    # === 用户坐标系事件处理 - 双坐标系功能 ===
     
     def _on_user_coord_toggle(self, enabled: bool):
         """
-        处理用户坐标系开关切换事件 ✨ 第五步增强：更新状态指示器
+        处理用户坐标系开关切换事件 - 第五步增强：更新状态指示器
         
         Args:
             enabled: True表示启用，False表示关闭
         """
-        print(f"✨ 控制器收到用户坐标系{'启用' if enabled else '关闭'}事件")
+        print(f"- 控制器收到用户坐标系{'启用' if enabled else '关闭'}事件")
         
         # 通知视图切换坐标系模式
         self.canvas_view.set_user_coordinate_mode(enabled)
         
-        # 更新状态指示器 ✨ 第五步新增功能
+        # 更新状态指示器 - 第五步新增功能
         self.input_panel.update_coordinate_mode_status(enabled)
         
         if not enabled:
@@ -285,25 +285,25 @@ class MatplotlibController:
     
     def _on_user_position_set(self, x: float, y: float):
         """
-        处理用户位置设置事件 ✨ 第五步增强：更新状态指示器
+        处理用户位置设置事件 - 第五步增强：更新状态指示器
         
         Args:
             x: 用户X坐标
             y: 用户Y坐标
         """
-        print(f"✨ 控制器收到设置用户位置事件: ({x:.3f}, {y:.3f})")
+        print(f"- 控制器收到设置用户位置事件: ({x:.3f}, {y:.3f})")
         
         # 通知视图设置用户位置
         self.canvas_view.set_user_position(x, y)
         
-        # 更新用户位置状态指示器 ✨ 第五步新增功能
+        # 更新用户位置状态指示器 - 第五步新增功能
         self.input_panel.update_user_position_status((x, y))
         
         # 标记项目已修改
         self.project_manager.mark_modified()
         self._update_window_title()
 
-    # === 背景图事件处理 ✨ V2.5 背景户型图功能 ===
+    # === 背景图事件处理 - V2.5 背景户型图功能 ===
     
     def _on_background_import(self, file_path: str):
         """
@@ -354,13 +354,13 @@ class MatplotlibController:
             self.project_manager.mark_modified()
             self._update_window_title()
             
-            print(f"✅ 背景图导入成功: {actual_w:.1f}m × {actual_h:.1f}m")
+            print(f"[OK] 背景图导入成功: {actual_w:.1f}m × {actual_h:.1f}m")
         else:
             messagebox.showerror("导入失败", "无法加载图片文件，请检查文件格式")
     
     def _on_background_remove(self):
         """处理背景图移除事件"""
-        print("🗑️ 控制器收到移除背景图请求")
+        print("[INFO] 控制器收到移除背景图请求")
         
         self.canvas_view.remove_background()
         
@@ -375,7 +375,7 @@ class MatplotlibController:
         Args:
             ppu: 每格像素数
         """
-        print(f"📏 控制器收到背景图比例变化: {ppu} px/格")
+        print(f"[INFO] 控制器收到背景图比例变化: {ppu} px/格")
         
         if self.canvas_view.update_background_scale(ppu):
             # 更新输入面板显示
@@ -517,7 +517,7 @@ class MatplotlibController:
             if not success:
                 # 底层验证失败，显示错误消息
                 messagebox.showerror("添加设备失败", message)
-                print(f"❌ 设备添加失败: {message}")
+                print(f"[ERROR] 设备添加失败: {message}")
                 return False
             
             # 只有成功时才标记项目已修改
@@ -527,12 +527,12 @@ class MatplotlibController:
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
             
-            print(f"✅ 设备添加成功: {name} ({x:.3f}, {y:.3f})")
+            print(f"[OK] 设备添加成功: {name} ({x:.3f}, {y:.3f})")
             return True
             
         except Exception as e:
             messagebox.showerror("添加设备失败", f"无法添加设备: {str(e)}")
-            print(f"❌ 设备添加失败: {e}")
+            print(f"[ERROR] 设备添加失败: {e}")
             return False
     
     def update_device(self, device_id: str, name: str, x: float, y: float, color: Optional[str] = None) -> bool:
@@ -557,7 +557,7 @@ class MatplotlibController:
             if not success:
                 # 底层验证失败，显示错误消息
                 messagebox.showerror("更新设备失败", message)
-                print(f"❌ 设备更新失败: {message}")
+                print(f"[ERROR] 设备更新失败: {message}")
                 return False
             
             # 只有成功时才标记项目已修改
@@ -567,12 +567,12 @@ class MatplotlibController:
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
             
-            print(f"✅ 设备更新成功: {name} ({x:.3f}, {y:.3f})")
+            print(f"[OK] 设备更新成功: {name} ({x:.3f}, {y:.3f})")
             return True
             
         except Exception as e:
             messagebox.showerror("更新设备失败", f"无法更新设备: {str(e)}")
-            print(f"❌ 设备更新失败: {e}")
+            print(f"[ERROR] 设备更新失败: {e}")
             return False
     
     def delete_device(self, device_id: str) -> bool:
@@ -589,7 +589,7 @@ class MatplotlibController:
             device = self.device_manager.get_device_by_id(device_id)
             if not device:
                 messagebox.showerror("删除设备失败", "设备不存在")
-                print(f"❌ 设备不存在: {device_id}")
+                print(f"[ERROR] 设备不存在: {device_id}")
                 return False
             
             device_name = device.name
@@ -599,7 +599,7 @@ class MatplotlibController:
             if not success:
                 # 底层操作失败，显示错误消息
                 messagebox.showerror("删除设备失败", message)
-                print(f"❌ 设备删除失败: {message}")
+                print(f"[ERROR] 设备删除失败: {message}")
                 return False
             
             # 只有成功时才标记项目已修改
@@ -609,12 +609,12 @@ class MatplotlibController:
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
             
-            print(f"✅ 设备删除成功: {device_name}")
+            print(f"[OK] 设备删除成功: {device_name}")
             return True
             
         except Exception as e:
             messagebox.showerror("删除设备失败", f"无法删除设备: {str(e)}")
-            print(f"❌ 设备删除失败: {e}")
+            print(f"[ERROR] 设备删除失败: {e}")
             return False
     
     def get_all_devices(self) -> List[Device]:
@@ -662,11 +662,11 @@ class MatplotlibController:
             # 更新视图
             self.canvas_view.set_coordinate_range(x_range, y_range)
             
-            print(f"✅ 坐标范围设置成功: ±{x_range} x ±{y_range}")
+            print(f"[OK] 坐标范围设置成功: ±{x_range} x ±{y_range}")
             
         except Exception as e:
             messagebox.showerror("设置坐标范围失败", f"无法设置坐标范围: {str(e)}")
-            print(f"❌ 坐标范围设置失败: {e}")
+            print(f"[ERROR] 坐标范围设置失败: {e}")
     
     # === 导出功能 ===
     
@@ -688,7 +688,7 @@ class MatplotlibController:
             )
             
             if not file_path:
-                print("⚠️ 用户取消导出")
+                print("[WARN] 用户取消导出")
                 return
             
             # 执行导出
@@ -696,14 +696,14 @@ class MatplotlibController:
             
             if success:
                 messagebox.showinfo("导出成功", f"PNG图片已成功导出到:\n{file_path}")
-                print(f"✅ PNG导出成功: {file_path}")
+                print(f"[OK] PNG导出成功: {file_path}")
             else:
                 messagebox.showerror("导出失败", "PNG图片导出失败，请检查文件路径和权限")
-                print("❌ PNG导出失败")
+                print("[ERROR] PNG导出失败")
                 
         except Exception as e:
             messagebox.showerror("导出错误", f"导出过程中发生错误: {str(e)}")
-            print(f"❌ PNG导出错误: {e}")
+            print(f"[ERROR] PNG导出错误: {e}")
     
     # === 重置功能 ===
     
@@ -720,7 +720,7 @@ class MatplotlibController:
             )
             
             if not result:
-                print("⚠️ 用户取消重置")
+                print("[WARN] 用户取消重置")
                 return
             
             # 清除设备数据
@@ -735,12 +735,12 @@ class MatplotlibController:
             # 重置输入面板（包括背景图UI状态）
             self.input_panel.reset_inputs()
             
-            print("✅ 重置完成")
+            print("[OK] 重置完成")
             messagebox.showinfo("重置完成", "所有数据已成功重置")
             
         except Exception as e:
             messagebox.showerror("重置失败", f"重置过程中发生错误: {str(e)}")
-            print(f"❌ 重置失败: {e}")
+            print(f"[ERROR] 重置失败: {e}")
     
     # === 测量点功能 ===
     
@@ -810,11 +810,11 @@ class MatplotlibController:
             # 更新窗口标题
             self._update_window_title()
             
-            print("✅ 新建项目完成")
+            print("[OK] 新建项目完成")
             
         except Exception as e:
             messagebox.showerror("新建项目失败", f"新建项目时发生错误: {str(e)}")
-            print(f"❌ 新建项目失败: {e}")
+            print(f"[ERROR] 新建项目失败: {e}")
     
     def open_project(self):
         """打开项目"""
@@ -846,7 +846,7 @@ class MatplotlibController:
             )
             
             if not file_path:
-                print("⚠️ 用户取消打开")
+                print("[WARN] 用户取消打开")
                 return
             
             # 加载项目
@@ -854,7 +854,7 @@ class MatplotlibController:
             
         except Exception as e:
             messagebox.showerror("打开项目失败", f"打开项目时发生错误: {str(e)}")
-            print(f"❌ 打开项目失败: {e}")
+            print(f"[ERROR] 打开项目失败: {e}")
     
     def save_project(self) -> bool:
         """
@@ -873,7 +873,7 @@ class MatplotlibController:
             
         except Exception as e:
             messagebox.showerror("保存项目失败", f"保存项目时发生错误: {str(e)}")
-            print(f"❌ 保存项目失败: {e}")
+            print(f"[ERROR] 保存项目失败: {e}")
             return False
     
     def save_project_as(self) -> bool:
@@ -901,7 +901,7 @@ class MatplotlibController:
             )
             
             if not file_path:
-                print("⚠️ 用户取消保存")
+                print("[WARN] 用户取消保存")
                 return False
             
             # 保存到指定路径
@@ -909,7 +909,7 @@ class MatplotlibController:
             
         except Exception as e:
             messagebox.showerror("另存为失败", f"另存为时发生错误: {str(e)}")
-            print(f"❌ 另存为失败: {e}")
+            print(f"[ERROR] 另存为失败: {e}")
             return False
     
     def import_devices_csv(self):
@@ -925,7 +925,7 @@ class MatplotlibController:
             )
             
             if not file_path:
-                print("⚠️ 用户取消导入")
+                print("[WARN] 用户取消导入")
                 return
             
             # 导入设备
@@ -954,7 +954,7 @@ class MatplotlibController:
                     added_count += 1
                 else:
                     skipped_count += 1
-                    print(f"⚠️ 跳过设备 {device.name}: {msg}")
+                    print(f"[WARN] 跳过设备 {device.name}: {msg}")
             
             # 更新视图
             self.canvas_view.update_devices(self.device_manager.get_devices())
@@ -970,11 +970,11 @@ class MatplotlibController:
                 result_message += f"\n跳过 {skipped_count} 个设备（名称重复或超出数量限制）"
             
             messagebox.showinfo("导入完成", result_message)
-            print(f"✅ {result_message}")
+            print(f"[OK] {result_message}")
             
         except Exception as e:
             messagebox.showerror("导入错误", f"导入过程中发生错误: {str(e)}")
-            print(f"❌ CSV导入错误: {e}")
+            print(f"[ERROR] CSV导入错误: {e}")
     
     def export_devices_csv(self):
         """导出设备列表到CSV"""
@@ -1001,7 +1001,7 @@ class MatplotlibController:
             )
             
             if not file_path:
-                print("⚠️ 用户取消导出")
+                print("[WARN] 用户取消导出")
                 return
             
             # 执行导出
@@ -1014,7 +1014,7 @@ class MatplotlibController:
                 
         except Exception as e:
             messagebox.showerror("导出错误", f"导出过程中发生错误: {str(e)}")
-            print(f"❌ CSV导出错误: {e}")
+            print(f"[ERROR] CSV导出错误: {e}")
     
     def _save_to_file(self, file_path: str) -> bool:
         """
@@ -1071,7 +1071,7 @@ class MatplotlibController:
                 
         except Exception as e:
             messagebox.showerror("保存错误", f"保存过程中发生错误: {str(e)}")
-            print(f"❌ 保存错误: {e}")
+            print(f"[ERROR] 保存错误: {e}")
             return False
     
     def _load_project_file(self, file_path: str):
@@ -1124,7 +1124,7 @@ class MatplotlibController:
                     self.canvas_view.set_user_coordinate_mode(False)
                     self.canvas_view.clear_user_position()
                 except Exception as e:
-                    print(f"⚠️ 清除用户坐标系视图时出错（已忽略）: {e}")
+                    print(f"[WARN] 清除用户坐标系视图时出错（已忽略）: {e}")
                 # 更新输入面板
                 self.input_panel.set_user_coord_enabled(False)
                 self.input_panel.update_user_position_status(None)
@@ -1139,13 +1139,13 @@ class MatplotlibController:
             if 'locked_measurement_parsed' in project_data:
                 locked_measurement = project_data['locked_measurement_parsed']
                 self.canvas_view.set_locked_measurement(locked_measurement)
-                print(f"📍 恢复锁定测量数据: {locked_measurement}")
+                print(f"[INFO] 恢复锁定测量数据: {locked_measurement}")
             
             # V2.5: 恢复背景图数据
             if 'background_image_parsed' in project_data:
                 background_image = project_data['background_image_parsed']
                 self.set_background_image(background_image)
-                print(f"🖼️ 恢复背景图数据")
+                print(f"[INFO] 恢复背景图数据")
             else:
                 # 清除可能存在的旧背景图
                 self.canvas_view.remove_background()
@@ -1159,11 +1159,11 @@ class MatplotlibController:
             self._update_window_title()
             
             messagebox.showinfo("加载成功", f"项目加载成功：{Path(file_path).name}")
-            print(f"✅ 项目加载成功: {file_path}")
+            print(f"[OK] 项目加载成功: {file_path}")
             
         except Exception as e:
             messagebox.showerror("加载错误", f"加载项目时发生错误: {str(e)}")
-            print(f"❌ 加载错误: {e}")
+            print(f"[ERROR] 加载错误: {e}")
     
     def _update_recent_files_menu(self):
         """更新最近文件菜单"""
@@ -1191,7 +1191,7 @@ class MatplotlibController:
             self.recent_menu.add_command(label="清除历史", command=self._clear_recent_files)
             
         except Exception as e:
-            print(f"⚠️ 更新最近文件菜单失败: {e}")
+            print(f"[WARN] 更新最近文件菜单失败: {e}")
     
     def _open_recent_file(self, file_path: str):
         """打开最近文件"""
@@ -1222,13 +1222,13 @@ class MatplotlibController:
             
         except Exception as e:
             messagebox.showerror("打开失败", f"打开最近文件时发生错误: {str(e)}")
-            print(f"❌ 打开最近文件失败: {e}")
+            print(f"[ERROR] 打开最近文件失败: {e}")
     
     def _clear_recent_files(self):
         """清除最近文件历史"""
         self.config_manager.clear_recent_files()
         self._update_recent_files_menu()
-        print("✅ 最近文件历史已清除")
+        print("[OK] 最近文件历史已清除")
     
     def _update_window_title(self):
         """更新窗口标题"""
@@ -1240,12 +1240,12 @@ class MatplotlibController:
     def _start_autosave(self):
         """启动自动保存定时器"""
         if not self.config_manager.is_autosave_enabled():
-            print("⚠️ 自动保存已禁用")
+            print("[WARN] 自动保存已禁用")
             return
         
         interval = self.config_manager.get_autosave_interval()
         self.autosave_timer_id = self.root.after(interval * 1000, self._autosave)
-        print(f"✅ 自动保存定时器已启动，间隔: {interval}秒")
+        print(f"[OK] 自动保存定时器已启动，间隔: {interval}秒")
     
     def _autosave(self):
         """执行自动保存"""
@@ -1299,7 +1299,7 @@ class MatplotlibController:
                 self.config_manager.clean_old_autosave_files(keep_count=5)
             
         except Exception as e:
-            print(f"⚠️ 自动保存失败: {e}")
+            print(f"[WARN] 自动保存失败: {e}")
         finally:
             # 继续下一次定时
             self._start_autosave()
@@ -1322,10 +1322,10 @@ class MatplotlibController:
                 
                 if result:
                     self._load_project_file(str(latest_autosave))
-                    print(f"✅ 从草稿恢复成功")
+                    print(f"[OK] 从草稿恢复成功")
                     
         except Exception as e:
-            print(f"⚠️ 检查自动保存恢复失败: {e}")
+            print(f"[WARN] 检查自动保存恢复失败: {e}")
     
     def _on_window_closing(self):
         """窗口关闭事件处理"""
@@ -1352,5 +1352,5 @@ class MatplotlibController:
             print("👋 应用程序已退出")
             
         except Exception as e:
-            print(f"❌ 关闭窗口时发生错误: {e}")
+            print(f"[ERROR] 关闭窗口时发生错误: {e}")
             self.root.destroy() 

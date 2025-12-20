@@ -766,7 +766,7 @@ class FastLayoutManager:
                 math.cos(default_angle), math.sin(default_angle), box_width, box_height
             )
             best_position = (corner_x + corner_offset_x, corner_y + corner_offset_y)
-            print(f"⚠️ 12方向约束：未找到合适位置，使用默认位置")
+            print(f"[WARN] 12方向约束：未找到合适位置，使用默认位置")
         
         return best_position
     
@@ -878,7 +878,7 @@ class FastLayoutManager:
             log_threshold = LayoutConstants.POSITION_CHANGE_LOG_THRESHOLD
             if (abs(best_position[0] - original_pos[0]) > log_threshold or 
                 abs(best_position[1] - original_pos[1]) > log_threshold):
-                print(f"🚀 高性能避让: {element_type.value} 位置优化 (评分:{best_score:.1f})")
+                print(f"[INFO] 高性能避让: {element_type.value} 位置优化 (评分:{best_score:.1f})")
         
         return best_position
     
@@ -943,7 +943,7 @@ class FastLayoutManager:
                 if distance < spacing_threshold:
                     score += max(0, (spacing_threshold - distance)) * LayoutConstants.SPACING_PENALTY
         
-        # 🎯 距离锚点的惩罚（核心优化）
+        # - 距离锚点的惩罚（核心优化）
         if anchor_x is not None and anchor_y is not None:
             anchor_distance = math.sqrt((box_center_x - anchor_x)**2 + (box_center_y - anchor_y)**2)
             
@@ -973,7 +973,7 @@ class FastLayoutManager:
         center_distance_x = abs(box_center_x - canvas_center_x) / (canvas_width / 2)
         center_distance_y = abs(box_center_y - canvas_center_y) / (canvas_height / 2)
         
-        # 🎯 更严格的边界惩罚：从60%开始惩罚
+        # - 更严格的边界惩罚：从60%开始惩罚
         boundary_start = LayoutConstants.BOUNDARY_START_RATIO
         if center_distance_x > boundary_start:
             score += (center_distance_x - boundary_start) * self.boundary_penalty * LayoutConstants.BOUNDARY_PENALTY_MULTIPLIER
