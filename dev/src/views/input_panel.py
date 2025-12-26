@@ -14,6 +14,7 @@ from tkinter import ttk
 from typing import Optional, List, Callable, Dict, Any
 from models.device_model import Device
 from utils.font_config import get_ui_font
+from utils.validation import Validator
 
 
 class InputPanel:
@@ -745,10 +746,10 @@ class InputPanel:
             x_range = float(self.x_range_var.get())
             y_range = float(self.y_range_var.get())
             
-            if x_range < 0.1 or x_range > 50:
-                raise ValueError("X轴范围必须在0.1-50之间")
-            if y_range < 0.1 or y_range > 50:
-                raise ValueError("Y轴范围必须在0.1-50之间")
+            if x_range < Validator.MIN_COORDINATE_RANGE or x_range > Validator.MAX_COORDINATE_RANGE:
+                raise ValueError(f"X轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
+            if y_range < Validator.MIN_COORDINATE_RANGE or y_range > Validator.MAX_COORDINATE_RANGE:
+                raise ValueError(f"Y轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
             
             if self.on_range_change_callback:
                 self.on_range_change_callback(x_range, y_range)

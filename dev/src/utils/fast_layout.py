@@ -168,9 +168,9 @@ class SectorRegion:
             # 跨越0度的情况
             return angle_deg >= start or angle_deg <= end
     
-    def get_repulsion_force(self, x: float, y: float) -> Tuple[float, float]:
+    def get_repulsion_force(self, x: float, y: float, element_id: str = "") -> Tuple[float, float]:
         """
-        计算扇形对点的斥力 - 增强版
+        计算扇形对点的斥力 - 增强版（确定性策略）
         
         如果点在扇形内或靠近扇形边界，施加沿径向向外的强斥力
         确保标签被强力弹出扇形区域
@@ -178,6 +178,7 @@ class SectorRegion:
         Args:
             x: 点的X坐标
             y: 点的Y坐标
+            element_id: 元素ID（用于生成确定性方向）
             
         Returns:
             斥力向量 (force_x, force_y)
@@ -187,8 +188,16 @@ class SectorRegion:
         distance = math.sqrt(dx*dx + dy*dy)
         
         if distance < LayoutConstants.NEAR_ZERO_THRESHOLD:
-            # 在圆心附近，向随机方向弹开
-            angle = random.random() * 2 * math.pi
+            # 在圆心附近，使用确定性方向弹开（基于element_id的hash值）
+            # 这确保相同元素每次计算得到相同方向，布局结果可复现
+            if element_id:
+                # 使用简单的 hash 计算生成 0-11 之间的索引（12个方向）
+                hash_val = sum(ord(c) for c in element_id)
+                direction_index = hash_val % 12
+                angle = direction_index * (math.pi / 6)  # 每30度一个方向
+            else:
+                # 无 element_id 时回退到随机方向（兼容旧调用）
+                angle = random.random() * 2 * math.pi
             return (math.cos(angle) * LayoutConstants.SECTOR_CENTER_REPULSION, 
                     math.sin(angle) * LayoutConstants.SECTOR_CENTER_REPULSION)
         
@@ -475,13 +484,14 @@ class FastLayoutManager:
         
         return total_penalty
     
-    def _get_sector_repulsion_force(self, x: float, y: float) -> Tuple[float, float]:
+    def _get_sector_repulsion_force(self, x: float, y: float, element_id: str = "") -> Tuple[float, float]:
         """
         计算所有扇形对点的总斥力
         
         Args:
             x: 点的X坐标
             y: 点的Y坐标
+            element_id: 元素ID（用于生成确定性方向）
             
         Returns:
             总斥力向量 (force_x, force_y)
@@ -490,7 +500,7 @@ class FastLayoutManager:
         total_force_y = 0.0
         
         for sector in self.sector_regions:
-            force_x, force_y = sector.get_repulsion_force(x, y)
+            force_x, force_y = sector.get_repulsion_force(x, y, element_id)
             total_force_x += force_x
             total_force_y += force_y
         
@@ -1110,9 +1120,9 @@ class FastLayoutManager:
                 force_x = 0.0
                 force_y = 0.0
                 
-                # 🆕 扇形斥力场
+                # 🆕 扇形斥力场（使用 element_id 确保确定性方向）
                 sector_force_x, sector_force_y = self._get_sector_repulsion_force(
-                    element.current_x, element.current_y
+                    element.current_x, element.current_y, element.element_id
                 )
                 force_x += sector_force_x
                 force_y += sector_force_y

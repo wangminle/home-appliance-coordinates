@@ -19,7 +19,8 @@ class Validator:
     
     # 常量定义
     MIN_COORDINATE_RANGE = 0.1
-    MAX_COORDINATE_RANGE = 25.0
+    # 与界面/控制器一致：坐标范围支持 0.1-50
+    MAX_COORDINATE_RANGE = 50.0
     MIN_DEVICE_NAME_LENGTH = 1
     MAX_DEVICE_NAME_LENGTH = 20
     

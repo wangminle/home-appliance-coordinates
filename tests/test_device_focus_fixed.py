@@ -6,6 +6,14 @@
 验证修复后的设备选择和编辑功能
 """
 
+import sys
+
+# 该文件是“交互式手工验证脚本”，不适合作为自动化测试在CI/pytest环境运行
+if "pytest" in sys.modules:
+    import pytest
+
+    pytest.skip("交互式手工验证脚本（含 input），pytest 环境默认跳过。", allow_module_level=True)
+
 def test_instructions():
     """
     打印测试说明

@@ -6,6 +6,7 @@
 """
 
 from typing import Tuple, Optional
+from utils.validation import Validator
 
 
 class CoordinateSystem:
@@ -75,11 +76,11 @@ class CoordinateSystem:
         if self.x_range <= 0 or self.y_range <= 0:
             raise ValueError("坐标范围必须大于0")
         
-        if self.x_range < 0.1 or self.x_range > 50:
-            raise ValueError("X轴范围必须在0.1-50之间")
+        if self.x_range < Validator.MIN_COORDINATE_RANGE or self.x_range > Validator.MAX_COORDINATE_RANGE:
+            raise ValueError(f"X轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
         
-        if self.y_range < 0.1 or self.y_range > 50:
-            raise ValueError("Y轴范围必须在0.1-50之间")
+        if self.y_range < Validator.MIN_COORDINATE_RANGE or self.y_range > Validator.MAX_COORDINATE_RANGE:
+            raise ValueError(f"Y轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
         
         if self.canvas_width <= 0 or self.canvas_height <= 0:
             raise ValueError("Canvas尺寸必须大于0")

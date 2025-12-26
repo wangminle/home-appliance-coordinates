@@ -10,17 +10,20 @@ import tkinter as tk
 from tkinter import messagebox, filedialog, Menu
 from typing import List, Optional, Dict, Any
 import os
+import threading
 from datetime import datetime
 from pathlib import Path
 
 from models.device_model import Device
 from models.measurement_model import MeasurementPoint
 from models.background_model import BackgroundImage
+from models.locked_measurement import LockedMeasurement
 from views.matplotlib_view import MatplotlibView
 from views.input_panel import InputPanel
 from models.device_manager import DeviceManager
 from models.project_manager import ProjectManager
 from models.config_manager import ConfigManager
+from utils.validation import Validator
 
 
 class MatplotlibController:
@@ -46,6 +49,9 @@ class MatplotlibController:
         
         # 自动保存定时器ID
         self.autosave_timer_id: Optional[str] = None
+        # 自动保存后台线程控制（避免阻塞UI）
+        self._autosave_lock = threading.Lock()
+        self._autosave_in_progress = False
         
         # 创建主界面
         self._create_main_interface()
@@ -653,11 +659,11 @@ class MatplotlibController:
             if x_range <= 0 or y_range <= 0:
                 raise ValueError("坐标范围必须大于0")
             
-            if x_range < 0.1 or x_range > 50:
-                raise ValueError("X轴范围必须在0.1-50之间")
+            if x_range < Validator.MIN_COORDINATE_RANGE or x_range > Validator.MAX_COORDINATE_RANGE:
+                raise ValueError(f"X轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
             
-            if y_range < 0.1 or y_range > 50:
-                raise ValueError("Y轴范围必须在0.1-50之间")
+            if y_range < Validator.MIN_COORDINATE_RANGE or y_range > Validator.MAX_COORDINATE_RANGE:
+                raise ValueError(f"Y轴范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
             
             # 更新视图
             self.canvas_view.set_coordinate_range(x_range, y_range)
@@ -1250,56 +1256,85 @@ class MatplotlibController:
     def _autosave(self):
         """执行自动保存"""
         try:
-            # 收集数据
-            devices = self.device_manager.get_devices()
+            # 若上一次自动保存仍在进行，直接跳过本次，避免线程堆积
+            with self._autosave_lock:
+                if self._autosave_in_progress:
+                    return
+                self._autosave_in_progress = True
+
+            # === 轻量级快照（主线程）===
+            devices_snapshot = [Device.from_dict(d.to_dict()) for d in self.device_manager.get_devices()]
             x_range, y_range = self.canvas_view.current_range
-            
-            # V2.5: 获取锁定测量数据和背景图
+
+            # V2.5: 获取锁定测量数据和背景图（做轻量复制，避免跨线程被修改）
             locked_measurement = self.canvas_view.get_locked_measurement()
+            locked_snapshot = LockedMeasurement.from_dict(locked_measurement.to_dict()) if locked_measurement else None
+
             background_image = self.canvas_view.get_background_image()
-            
+            background_snapshot = None
+            if background_image is not None and background_image.is_loaded():
+                background_snapshot = BackgroundImage()
+                background_snapshot.image_path = background_image.image_path
+                background_snapshot.image_data = background_image.image_data
+                background_snapshot.pixel_width = background_image.pixel_width
+                background_snapshot.pixel_height = background_image.pixel_height
+                background_snapshot.dpi = background_image.dpi
+                background_snapshot.pixels_per_unit = background_image.pixels_per_unit
+                background_snapshot.x_min = background_image.x_min
+                background_snapshot.x_max = background_image.x_max
+                background_snapshot.y_min = background_image.y_min
+                background_snapshot.y_max = background_image.y_max
+                background_snapshot.alpha = background_image.alpha
+                background_snapshot.enabled = background_image.enabled
+
             # 检查是否有需要保存的数据（设备、背景图、用户坐标系或锁定扇形）
-            has_devices = len(devices) > 0
-            has_background = background_image is not None and background_image.is_loaded()
+            has_devices = len(devices_snapshot) > 0
+            has_background = background_snapshot is not None and background_snapshot.is_loaded()
             has_user_coord = self.canvas_view.user_coord_enabled and self.canvas_view.user_position is not None
-            has_locked_measurement = locked_measurement is not None and locked_measurement.has_data()
-            
+            has_locked_measurement = locked_snapshot is not None and locked_snapshot.has_data()
+
             if not (has_devices or has_background or has_user_coord or has_locked_measurement):
-                # 没有任何需要保存的数据，继续下一次定时
-                self._start_autosave()
+                with self._autosave_lock:
+                    self._autosave_in_progress = False
                 return
-            
-            # 获取自动保存文件路径
+
             autosave_path = self.config_manager.get_autosave_file_path()
-            
             coordinate_settings = {'x_range': x_range, 'y_range': y_range}
-            
             user_coord_settings = {
                 'enabled': self.canvas_view.user_coord_enabled,
                 'user_x': self.canvas_view.user_position[0] if self.canvas_view.user_position else None,
                 'user_y': self.canvas_view.user_position[1] if self.canvas_view.user_position else None
             }
-            
-            # 保存草稿（使用 save_draft 方法，不会更新项目状态）
-            # V2.5: 添加 locked_measurement 和 background_image 参数
-            success, message = self.project_manager.save_draft(
-                str(autosave_path),
-                devices,
-                coordinate_settings,
-                user_coord_settings,
-                {'name': '自动保存草稿', 'description': '自动保存的草稿文件'},
-                None,  # label_positions
-                locked_measurement,
-                background_image
-            )
-            
-            if success:
-                print(f"💾 自动保存成功: {autosave_path.name}")
-                # 清理旧的自动保存文件
-                self.config_manager.clean_old_autosave_files(keep_count=5)
-            
+
+            def _run_autosave():
+                try:
+                    success, _message = self.project_manager.save_draft(
+                        str(autosave_path),
+                        devices_snapshot,
+                        coordinate_settings,
+                        user_coord_settings,
+                        {'name': '自动保存草稿', 'description': '自动保存的草稿文件'},
+                        None,  # label_positions
+                        locked_snapshot,
+                        background_snapshot
+                    )
+
+                    if success:
+                        print(f"💾 自动保存成功: {autosave_path.name}")
+                        self.config_manager.clean_old_autosave_files(keep_count=5)
+                except Exception as e:
+                    print(f"[WARN] 自动保存失败: {e}")
+                finally:
+                    with self._autosave_lock:
+                        self._autosave_in_progress = False
+
+            threading.Thread(target=_run_autosave, daemon=True).start()
+
         except Exception as e:
             print(f"[WARN] 自动保存失败: {e}")
+            with self._autosave_lock:
+                self._autosave_in_progress = False
+
         finally:
             # 继续下一次定时
             self._start_autosave()

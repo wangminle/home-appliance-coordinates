@@ -20,6 +20,7 @@ from enum import Enum
 
 from models.coordinate_frame import CoordinateFrame, WORLD_FRAME, create_user_frame
 from models.device_model import Device
+from utils.validation import Validator
 
 
 class ChangeType(Enum):
@@ -297,8 +298,9 @@ class SceneModel:
             print("[ERROR] 坐标范围必须大于0")
             return False
         
-        if x_range < 0.1 or x_range > 50 or y_range < 0.1 or y_range > 50:
-            print("[ERROR] 坐标范围必须在0.1-50之间")
+        if (x_range < Validator.MIN_COORDINATE_RANGE or x_range > Validator.MAX_COORDINATE_RANGE or
+                y_range < Validator.MIN_COORDINATE_RANGE or y_range > Validator.MAX_COORDINATE_RANGE):
+            print(f"[ERROR] 坐标范围必须在{Validator.MIN_COORDINATE_RANGE}-{Validator.MAX_COORDINATE_RANGE}之间")
             return False
         
         old_range = self._coord_range
